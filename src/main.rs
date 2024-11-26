@@ -1,12 +1,13 @@
 mod logging;
 mod source;
 mod subcommands {
-    mod add;
+    pub mod add;
     pub mod init;
 }
 
 use crate::logging::{init_logger, LevelFilterArg};
-use crate::subcommands::init;
+use crate::subcommands::add::AddError;
+use crate::subcommands::{add, init};
 use clap::{Parser, Subcommand};
 use log::{error, info};
 
@@ -28,10 +29,7 @@ enum Command {
     /// Initialize the source file
     Init,
     /// Add a new source
-    Add {
-        #[arg(short, long)]
-        unpack: bool,
-    },
+    Add(add::AddArgs),
 }
 
 fn main() {
@@ -43,8 +41,25 @@ fn main() {
         Command::Init => match init::init(cli.source_file.as_ref()) {
             Ok(()) => info!("Successfully created {}", cli.source_file),
             Err(init::InitError::SourceFileExists) => error!("{} already exists", cli.source_file),
-            Err(e) => error!("{}", e),
+            Err(e) => error!("{e}"),
         },
-        Command::Add { unpack: _ } => todo!(),
+        Command::Add(add_args) => match add::add(cli.source_file.as_ref(), &add_args) {
+            Ok(()) => info!("Successfully added new source {}", add_args.source_name),
+            Err(AddError::SourceFileNotFound) => {
+                error!("source file not found at {}", cli.source_file)
+            }
+            Err(AddError::SourceNameAlreadyExists) => {
+                error!("a source named \"{}\" already exists", add_args.source_name);
+                error!("you may be trying to update, or if you want to override the source, delete it first");
+            }
+            Err(
+                e @ (AddError::MalformedJson { line: _, column: _ }
+                | AddError::IncorrectSchema { line: _, column: _ }),
+            ) => {
+                error!("{e}");
+                error!("you may have to delete and remake the source file");
+            }
+            Err(e) => error!("{e}"),
+        },
     }
 }
