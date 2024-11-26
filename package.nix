@@ -1,9 +1,22 @@
-{rustPlatform}:
+{
+  rustPlatform,
+  openssl,
+  pkg-config,
+}:
 rustPlatform.buildRustPackage {
   pname = "nix-kunai";
-  version = "0.1.0";
+  inherit ((builtins.fromTOML (builtins.readFile ./Cargo.toml)).package) version; 
 
   src = ./.;
 
-  cargoLock = ./Cargo.lock;
+  buildInputs = [
+    openssl
+  ];
+  nativeBuildInputs = [
+    pkg-config
+  ];
+
+  cargoLock = {
+    lockFile = ./Cargo.lock;
+  };
 }
