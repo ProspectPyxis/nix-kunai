@@ -8,7 +8,7 @@ pub struct Source {
     pub tag_prefix_filter: Option<String>,
 }
 
-#[derive(Deserialize, Serialize)]
+#[derive(Default, Deserialize, Serialize)]
 pub struct SourceMap {
     #[serde(flatten)]
     pub sources: HashMap<String, Source>,
