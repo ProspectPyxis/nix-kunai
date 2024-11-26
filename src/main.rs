@@ -2,12 +2,14 @@ mod logging;
 mod source;
 mod subcommands {
     pub mod add;
+    pub mod delete;
     pub mod init;
 }
 
 use crate::logging::{init_logger, LevelFilterArg};
 use crate::subcommands::add::AddError;
-use crate::subcommands::{add, init};
+use crate::subcommands::delete::DeleteError;
+use crate::subcommands::{add, delete, init};
 use clap::{Parser, Subcommand};
 use log::{error, info};
 
@@ -30,6 +32,11 @@ enum Command {
     Init,
     /// Add a new source
     Add(add::AddArgs),
+    /// Delete an existing source
+    Delete {
+        /// Name of the source to delete
+        source_name: String,
+    },
 }
 
 fn main() {
@@ -38,14 +45,14 @@ fn main() {
     init_logger(cli.log_level.into());
 
     match cli.command {
-        Command::Init => match init::init(cli.source_file.as_ref()) {
-            Ok(()) => info!("Successfully created {}", cli.source_file),
+        Command::Init => match init::init(&cli.source_file) {
+            Ok(()) => info!("successfully created {}", cli.source_file),
             Err(init::InitError::SourceFileExists) => error!("{} already exists", cli.source_file),
             Err(e) => error!("{e}"),
         },
 
-        Command::Add(add_args) => match add::add(cli.source_file.as_ref(), &add_args) {
-            Ok(()) => info!("Successfully added new source {}", add_args.source_name),
+        Command::Add(add_args) => match add::add(&cli.source_file, &add_args) {
+            Ok(()) => info!("successfully added new source {}", add_args.source_name),
             Err(AddError::SourceFileNotFound) => {
                 error!("source file not found at {}", cli.source_file)
             }
@@ -59,6 +66,24 @@ fn main() {
             ) => {
                 error!("{e}");
                 error!("you may have to delete and remake the source file");
+            }
+            Err(e) => error!("{e}"),
+        },
+
+        Command::Delete { source_name } => match delete::delete(&cli.source_file, &source_name) {
+            Ok(()) => info!("source \"{source_name}\" has been removed"),
+            Err(DeleteError::SourceFileNotFound) => {
+                error!("source file not found at {}", cli.source_file)
+            }
+            Err(
+                e @ (DeleteError::MalformedJson { line: _, column: _ }
+                | DeleteError::IncorrectSchema { line: _, column: _ }),
+            ) => {
+                error!("{e}");
+                error!("you may have to delete and remake the source file");
+            }
+            Err(DeleteError::SourceNameNonexistent) => {
+                error!("no source named \"{source_name}\" exists")
             }
             Err(e) => error!("{e}"),
         },
