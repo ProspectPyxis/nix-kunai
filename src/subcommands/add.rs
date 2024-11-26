@@ -27,7 +27,7 @@ pub enum AddError {
     #[error("source file not found at provided path")]
     SourceFileNotFound,
     #[error("could not read source file; permission denied")]
-    PermissionDenied,
+    ReadPermissionDenied,
     #[error("a source with this name already exists")]
     SourceNameAlreadyExists,
     #[error("source file json is malformed at line {line}, column {column}")]
@@ -36,16 +36,18 @@ pub enum AddError {
     IncorrectSchema { line: usize, column: usize },
     #[error(transparent)]
     GetArtifactHashError(#[from] SourceGetArtifactHashError),
-    #[error("unexpected io error: {0}")]
-    Io(io::Error),
+    #[error("could not write new source file; permission denied")]
+    WritePermissionDenied,
     #[error("unexpected json error while writing to file: {0}")]
     SerdeWriteError(serde_json::Error),
+    #[error("unexpected io error: {0}")]
+    Io(io::Error),
 }
 
 pub fn add(source_file_path: &str, args: &AddArgs) -> Result<(), AddError> {
     let source_file = File::open(source_file_path).map_err(|e| match e.kind() {
         io::ErrorKind::NotFound => AddError::SourceFileNotFound,
-        io::ErrorKind::PermissionDenied => AddError::PermissionDenied,
+        io::ErrorKind::PermissionDenied => AddError::ReadPermissionDenied,
         _ => AddError::Io(e),
     })?;
 
@@ -70,7 +72,7 @@ pub fn add(source_file_path: &str, args: &AddArgs) -> Result<(), AddError> {
     sources.inner.insert(args.source_name.clone(), new_source);
 
     let source_file = File::create(source_file_path).map_err(|e| match e.kind() {
-        io::ErrorKind::PermissionDenied => AddError::PermissionDenied,
+        io::ErrorKind::PermissionDenied => AddError::WritePermissionDenied,
         _ => AddError::Io(e),
     })?;
 

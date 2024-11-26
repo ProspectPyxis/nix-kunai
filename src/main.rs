@@ -43,6 +43,7 @@ fn main() {
             Err(init::InitError::SourceFileExists) => error!("{} already exists", cli.source_file),
             Err(e) => error!("{e}"),
         },
+
         Command::Add(add_args) => match add::add(cli.source_file.as_ref(), &add_args) {
             Ok(()) => info!("Successfully added new source {}", add_args.source_name),
             Err(AddError::SourceFileNotFound) => {
