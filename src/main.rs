@@ -6,7 +6,10 @@ mod subcommands {
 
 use crate::subcommands::init;
 use clap::{Parser, Subcommand};
+use env_logger::fmt::style as anstyle;
 use log::{error, info};
+use log::{Level, LevelFilter};
+use std::io::Write;
 
 #[derive(Parser)]
 #[command(version, about, long_about = None)]
@@ -31,6 +34,31 @@ enum Command {
 
 fn main() {
     let cli = Cli::parse();
+
+    env_logger::builder()
+        .filter_level(LevelFilter::Info)
+        .format(|buf, record| {
+            let log_style = anstyle::Style::new().bold();
+            let log_style = log_style.fg_color(Some(
+                (match record.level() {
+                    Level::Trace => anstyle::AnsiColor::Magenta,
+                    Level::Debug => anstyle::AnsiColor::Blue,
+                    Level::Info => anstyle::AnsiColor::Green,
+                    Level::Warn => anstyle::AnsiColor::Yellow,
+                    Level::Error => anstyle::AnsiColor::Red,
+                })
+                .into(),
+            ));
+
+            writeln!(
+                buf,
+                "{} {log_style}{:5}{log_style:#} {}",
+                buf.timestamp_seconds(),
+                record.level(),
+                record.args()
+            )
+        })
+        .init();
 
     match cli.command {
         Command::Init => match init::init(cli.source_file.as_ref()) {
