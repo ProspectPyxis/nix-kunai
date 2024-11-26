@@ -7,6 +7,7 @@ mod subcommands {
 }
 
 use crate::logging::{init_logger, LevelFilterArg};
+use crate::source::SourceMapFromFileJsonError;
 use crate::subcommands::add::AddError;
 use crate::subcommands::delete::DeleteError;
 use crate::subcommands::{add, delete, init};
@@ -53,7 +54,7 @@ fn main() {
 
         Command::Add(add_args) => match add::add(&cli.source_file, &add_args) {
             Ok(()) => info!("successfully added new source {}", add_args.source_name),
-            Err(AddError::SourceFileNotFound) => {
+            Err(AddError::ReadSourceFromFileFailed(SourceMapFromFileJsonError::NotFound)) => {
                 error!("source file not found at {}", cli.source_file)
             }
             Err(AddError::SourceNameAlreadyExists) => {
@@ -61,8 +62,10 @@ fn main() {
                 error!("you may be trying to update, or if you want to override the source, delete it first");
             }
             Err(
-                e @ (AddError::MalformedJson { line: _, column: _ }
-                | AddError::IncorrectSchema { line: _, column: _ }),
+                e @ AddError::ReadSourceFromFileFailed(
+                    SourceMapFromFileJsonError::MalformedJson { .. }
+                    | SourceMapFromFileJsonError::IncorrectSchema { .. },
+                ),
             ) => {
                 error!("{e}");
                 error!("you may have to delete and remake the source file");
@@ -72,12 +75,14 @@ fn main() {
 
         Command::Delete { source_name } => match delete::delete(&cli.source_file, &source_name) {
             Ok(()) => info!("source \"{source_name}\" has been removed"),
-            Err(DeleteError::SourceFileNotFound) => {
+            Err(DeleteError::ReadSourceFromFileFailed(SourceMapFromFileJsonError::NotFound)) => {
                 error!("source file not found at {}", cli.source_file)
             }
             Err(
-                e @ (DeleteError::MalformedJson { line: _, column: _ }
-                | DeleteError::IncorrectSchema { line: _, column: _ }),
+                e @ DeleteError::ReadSourceFromFileFailed(
+                    SourceMapFromFileJsonError::MalformedJson { .. }
+                    | SourceMapFromFileJsonError::IncorrectSchema { .. },
+                ),
             ) => {
                 error!("{e}");
                 error!("you may have to delete and remake the source file");

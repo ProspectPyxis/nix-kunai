@@ -2,7 +2,9 @@ use log::info;
 use serde::{Deserialize, Serialize};
 use serde_json::error::Category as JsonErrorCategory;
 use std::collections::BTreeMap;
-use std::io::{self, Read};
+use std::fs::File;
+use std::io::{self, Read, Write};
+use std::path::Path;
 use std::process::Command;
 use thiserror::Error;
 
@@ -54,9 +56,14 @@ impl Source {
     }
 
     pub fn get_artifact_hash(&self) -> Result<String, SourceGetArtifactHashError> {
+        let version_str = format!(
+            "{}{}",
+            self.tag_prefix_filter.as_deref().unwrap_or(""),
+            self.version
+        );
         let full_url = self
             .artifact_url_template
-            .replace("{version}", &self.version);
+            .replace("{version}", &version_str);
 
         let mut args = vec!["store", "prefetch-file", &full_url, "--json"];
         if self.unpack {
@@ -107,35 +114,75 @@ pub struct SourceMap {
 }
 
 #[derive(Debug, Error)]
-pub enum SourceMapFromReaderJsonError {
+pub enum SourceMapFromFileJsonError {
+    #[error("source file does not exist")]
+    NotFound,
+    #[error("could not read source file; permission denied")]
+    PermissionDenied,
+    #[error("source file json is malformed at line {line}, column {column}")]
+    MalformedJson { line: usize, column: usize },
+    #[error(
+        "source file json does not confirm to nix-kunai schema at line {line}, column {column}"
+    )]
+    IncorrectSchema { line: usize, column: usize },
+    #[error("unexpected io error: {0}")]
+    Io(#[from] io::Error),
+}
+
+#[derive(Debug, Error)]
+pub enum SourceMapWriteToFileError {
+    #[error("could not write to source file; permission denied")]
+    PermissionDenied,
     #[error("unexpected io error: {0}")]
     Io(io::Error),
-    #[error("json is malformed at line {line}, column {column}")]
-    MalformedJson { line: usize, column: usize },
-    #[error("json does not fit nix-kunai schema at line {line}, column {column}")]
-    IncorrectSchema { line: usize, column: usize },
+    #[error("unexpected json error while writing to source file: {0}")]
+    SerdeWriteError(serde_json::Error),
 }
 
 impl SourceMap {
-    pub fn from_reader_json<R: Read>(reader: R) -> Result<Self, SourceMapFromReaderJsonError> {
-        serde_json::from_reader(reader).map_err(|e| {
-            if let Some(io_error) = e.io_error_kind() {
-                SourceMapFromReaderJsonError::Io(io::Error::new(io_error, e))
+    pub fn from_reader_json<R: Read>(reader: R) -> Result<Self, serde_json::Error> {
+        serde_json::from_reader(reader)
+    }
+
+    pub fn from_file_json<P: AsRef<Path>>(path: P) -> Result<Self, SourceMapFromFileJsonError> {
+        let file = File::open(path).map_err(|e| match e.kind() {
+            io::ErrorKind::NotFound => SourceMapFromFileJsonError::NotFound,
+            io::ErrorKind::PermissionDenied => SourceMapFromFileJsonError::PermissionDenied,
+            _ => SourceMapFromFileJsonError::Io(e),
+        })?;
+
+        Self::from_reader_json(file).map_err(|e| {
+            if let Some(kind) = e.io_error_kind() {
+                io::Error::new(kind, e).into()
             } else {
                 match e.classify() {
-                    JsonErrorCategory::Io => SourceMapFromReaderJsonError::Io(io::Error::other(e)),
+                    JsonErrorCategory::Io => io::Error::other(e).into(),
                     JsonErrorCategory::Syntax | JsonErrorCategory::Eof => {
-                        SourceMapFromReaderJsonError::MalformedJson {
+                        SourceMapFromFileJsonError::MalformedJson {
                             line: e.line(),
                             column: e.column(),
                         }
                     }
-                    JsonErrorCategory::Data => SourceMapFromReaderJsonError::IncorrectSchema {
+                    JsonErrorCategory::Data => SourceMapFromFileJsonError::IncorrectSchema {
                         line: e.line(),
                         column: e.column(),
                     },
                 }
             }
         })
+    }
+
+    pub fn write_to_writer_pretty<W: Write>(&self, writer: W) -> Result<(), serde_json::Error> {
+        serde_json::to_writer_pretty(writer, self)
+    }
+
+    pub fn write_to_file<P: AsRef<Path>>(&self, path: P) -> Result<(), SourceMapWriteToFileError> {
+        let file = File::create(path).map_err(|e| match e.kind() {
+            io::ErrorKind::PermissionDenied => SourceMapWriteToFileError::PermissionDenied,
+            _ => SourceMapWriteToFileError::Io(e),
+        })?;
+
+        self.write_to_writer_pretty(file)
+            .map_err(SourceMapWriteToFileError::SerdeWriteError)
     }
 }

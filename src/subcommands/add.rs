@@ -1,7 +1,8 @@
-use crate::source::{Source, SourceGetArtifactHashError, SourceMap, SourceMapFromReaderJsonError};
+use crate::source::{
+    Source, SourceGetArtifactHashError, SourceMap, SourceMapFromFileJsonError,
+    SourceMapWriteToFileError,
+};
 use clap::Args;
-use std::fs::File;
-use std::io;
 use thiserror::Error;
 
 #[derive(Args, Clone)]
@@ -24,42 +25,18 @@ pub struct AddArgs {
 
 #[derive(Debug, Error)]
 pub enum AddError {
-    #[error("source file not found at provided path")]
-    SourceFileNotFound,
-    #[error("could not read source file; permission denied")]
-    ReadPermissionDenied,
+    #[error(transparent)]
+    ReadSourceFromFileFailed(#[from] SourceMapFromFileJsonError),
     #[error("a source with this name already exists")]
     SourceNameAlreadyExists,
-    #[error("source file json is malformed at line {line}, column {column}")]
-    MalformedJson { line: usize, column: usize },
-    #[error("source file json does not fit nix-kunai schema at line {line}, column {column}")]
-    IncorrectSchema { line: usize, column: usize },
     #[error(transparent)]
     GetArtifactHashError(#[from] SourceGetArtifactHashError),
-    #[error("could not write new source file; permission denied")]
-    WritePermissionDenied,
-    #[error("unexpected json error while writing to file: {0}")]
-    SerdeWriteError(serde_json::Error),
-    #[error("unexpected io error: {0}")]
-    Io(io::Error),
+    #[error(transparent)]
+    WriteToFileError(#[from] SourceMapWriteToFileError),
 }
 
 pub fn add(source_file_path: &str, args: &AddArgs) -> Result<(), AddError> {
-    let source_file = File::open(source_file_path).map_err(|e| match e.kind() {
-        io::ErrorKind::NotFound => AddError::SourceFileNotFound,
-        io::ErrorKind::PermissionDenied => AddError::ReadPermissionDenied,
-        _ => AddError::Io(e),
-    })?;
-
-    let mut sources = SourceMap::from_reader_json(source_file).map_err(|e| match e {
-        SourceMapFromReaderJsonError::MalformedJson { line, column } => {
-            AddError::MalformedJson { line, column }
-        }
-        SourceMapFromReaderJsonError::IncorrectSchema { line, column } => {
-            AddError::IncorrectSchema { line, column }
-        }
-        SourceMapFromReaderJsonError::Io(io_err) => AddError::Io(io_err),
-    })?;
+    let mut sources = SourceMap::from_file_json(source_file_path)?;
 
     if sources.inner.contains_key(&args.source_name) {
         return Err(AddError::SourceNameAlreadyExists);
@@ -71,18 +48,7 @@ pub fn add(source_file_path: &str, args: &AddArgs) -> Result<(), AddError> {
 
     sources.inner.insert(args.source_name.clone(), new_source);
 
-    let source_file = File::create(source_file_path).map_err(|e| match e.kind() {
-        io::ErrorKind::PermissionDenied => AddError::WritePermissionDenied,
-        _ => AddError::Io(e),
-    })?;
-
-    serde_json::to_writer_pretty(source_file, &sources).map_err(|e| {
-        if let Some(kind) = e.io_error_kind() {
-            AddError::Io(io::Error::new(kind, e))
-        } else {
-            AddError::SerdeWriteError(e)
-        }
-    })?;
+    sources.write_to_file(source_file_path)?;
 
     Ok(())
 }
