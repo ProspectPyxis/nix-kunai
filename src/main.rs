@@ -42,7 +42,7 @@ fn main() {
     match cli.command {
         Command::Init => match init::init(cli.source_file.as_ref()) {
             Ok(()) => info!("Successfully created {}", cli.source_file),
-            Err(init::InitError::LockfileExists) => error!("{} already exists", cli.source_file),
+            Err(init::InitError::SourceFileExists) => error!("{} already exists", cli.source_file),
             Err(e) => error!("{}", e),
         },
         Command::Add { unpack: _ } => todo!(),

@@ -4,15 +4,15 @@ use thiserror::Error;
 
 #[derive(Debug, Error)]
 pub enum InitError {
-    #[error("lockfile already exists")]
-    LockfileExists,
+    #[error("source file already exists")]
+    SourceFileExists,
     #[error("unexpected io error: {0}")]
     Io(std::io::Error),
 }
 
 pub fn init(source_file_path: &str) -> Result<(), InitError> {
     let mut source_file = File::create_new(source_file_path).map_err(|e| match e.kind() {
-        ErrorKind::AlreadyExists => InitError::LockfileExists,
+        ErrorKind::AlreadyExists => InitError::SourceFileExists,
         _ => InitError::Io(e),
     })?;
 
