@@ -6,12 +6,14 @@ use std::io::{self, Read, Write};
 use std::path::Path;
 use std::process::Command;
 use thiserror::Error;
+use url::Url;
 
 #[derive(Deserialize, Serialize)]
 pub struct Source {
     pub version: String,
     pub latest_checked_version: String,
     pub artifact_url_template: String,
+    git_url_inner: Option<Url>,
     pub hash: String,
     pub tag_prefix_filter: Option<String>,
     pub unpack: bool,
@@ -23,12 +25,20 @@ struct PrefetchFileResult {
     hash: String,
 }
 
+#[derive(Debug, Error)]
+#[error("constructed full url {full_url} is invalid: {parse_error}")]
+pub struct BuildFullUrlError {
+    full_url: String,
+    parse_error: url::ParseError,
+}
+
 impl Source {
     pub fn new(version: &str, artifact_url_template: &str) -> Self {
         Source {
             version: version.to_string(),
             latest_checked_version: version.to_string(),
             artifact_url_template: artifact_url_template.to_string(),
+            git_url_inner: None,
             hash: String::new(),
             tag_prefix_filter: None,
             unpack: false,
@@ -39,14 +49,38 @@ impl Source {
         Self { unpack, ..self }
     }
 
-    pub fn full_url(&self) -> String {
+    pub fn with_git_url(self, git_url: Option<Url>) -> Self {
+        Self {
+            git_url_inner: git_url,
+            ..self
+        }
+    }
+
+    pub fn git_url(&self, infer: bool) -> Option<Url> {
+        self.git_url_inner.clone().or_else(|| {
+            if infer {
+                Some(Url::parse("https://example.com").expect("example.com should always be valid"))
+            } else {
+                None
+            }
+        })
+    }
+
+    pub fn full_url(&self) -> Result<Url, BuildFullUrlError> {
         let version_str = format!(
             "{}{}",
             self.tag_prefix_filter.as_deref().unwrap_or(""),
             self.version
         );
-        self.artifact_url_template
-            .replace("{version}", &version_str)
+
+        let full_url = self
+            .artifact_url_template
+            .replace("{version}", &version_str);
+
+        Url::parse(&full_url).map_err(|parse_error| BuildFullUrlError {
+            full_url,
+            parse_error,
+        })
     }
 }
 
@@ -149,8 +183,9 @@ pub enum GetArtifactHashError {
     SerdeIoError(io::Error),
 }
 
-pub fn get_artifact_hash_from_url(url: &str, unpack: bool) -> Result<String, GetArtifactHashError> {
-    let mut args = vec!["store", "prefetch-file", &url, "--json"];
+pub fn get_artifact_hash_from_url(url: &Url, unpack: bool) -> Result<String, GetArtifactHashError> {
+    let url_string = url.to_string();
+    let mut args = vec!["store", "prefetch-file", &url_string, "--json"];
     if unpack {
         args.push("--unpack");
     }

@@ -2,13 +2,14 @@ use crate::source::{get_artifact_hash_from_url, Source, SourceMap};
 use clap::Args;
 use log::{error, info};
 use std::process::ExitCode;
+use url::Url;
 
 #[derive(Args, Clone)]
 pub struct AddArgs {
     /// The name of the source
     pub source_name: String,
     /// The url to fetch from for a hash, where {version} replaces the version number
-    #[arg(value_name = "ARTIFACT_URL")]
+    #[arg(value_name = "ARTIFACT_URL", value_parser = validate_artifact_url)]
     artifact_url_template: String,
     /// Initial version of the package to test for
     #[arg(value_name = "VERSION")]
@@ -18,7 +19,13 @@ pub struct AddArgs {
     unpack: bool,
     /// Check this git repo instead of inferring from artifact url
     #[arg(long, value_name = "REPOSITORY")]
-    git_repo_url: Option<String>,
+    git_repo_url: Option<Url>,
+}
+
+fn validate_artifact_url(s: &str) -> Result<String, String> {
+    Url::parse(s).map_err(|e| e.to_string())?;
+
+    Ok(s.to_string())
 }
 
 pub fn add(source_file_path: &str, args: AddArgs) -> ExitCode {
@@ -38,10 +45,17 @@ pub fn add(source_file_path: &str, args: AddArgs) -> ExitCode {
         return ExitCode::FAILURE;
     }
 
-    let mut new_source =
-        Source::new(&args.initial_version, &args.artifact_url_template).with_unpack(args.unpack);
+    let mut new_source = Source::new(&args.initial_version, &args.artifact_url_template)
+        .with_unpack(args.unpack)
+        .with_git_url(args.git_repo_url);
 
-    let full_url = new_source.full_url();
+    let full_url = match new_source.full_url() {
+        Ok(url) => url,
+        Err(e) => {
+            error!("{e}");
+            return ExitCode::FAILURE;
+        }
+    };
     info!("fetching hash from {full_url}");
     new_source.hash = match get_artifact_hash_from_url(&full_url, false) {
         Ok(hash) => hash,
