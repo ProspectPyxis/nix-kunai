@@ -66,6 +66,13 @@ impl Source {
         }
     }
 
+    pub fn with_tag_prefix(self, tag_prefix_filter: Option<String>) -> Self {
+        Self {
+            tag_prefix_filter,
+            ..self
+        }
+    }
+
     pub fn git_url(&self, infer: bool) -> Option<Result<Url, InferGitUrlError>> {
         if let Some(url) = &self.git_url_inner {
             Some(Ok(url.clone()))
@@ -96,16 +103,8 @@ impl Source {
         }
     }
 
-    pub fn full_url(&self) -> Result<Url, BuildFullUrlError> {
-        let version_str = format!(
-            "{}{}",
-            self.tag_prefix_filter.as_deref().unwrap_or(""),
-            self.version
-        );
-
-        let full_url = self
-            .artifact_url_template
-            .replace("{version}", &version_str);
+    pub fn full_url(&self, version: &str) -> Result<Url, BuildFullUrlError> {
+        let full_url = self.artifact_url_template.replace("{version}", version);
 
         Url::parse(&full_url).map_err(|parse_error| BuildFullUrlError {
             full_url,
@@ -268,7 +267,7 @@ pub enum FetchLatestGitTagError {
 
 pub fn fetch_latest_git_tag(
     url: &Url,
-    filter: Option<String>,
+    filter: Option<&str>,
 ) -> Result<String, FetchLatestGitTagError> {
     let args = [
         "-c",
@@ -288,7 +287,7 @@ pub fn fetch_latest_git_tag(
 
     let output_string = String::from_utf8(output.stdout)?;
 
-    let filter = filter.as_deref().unwrap_or("");
+    let filter = filter.unwrap_or("");
     let latest_tag = output_string
         .lines()
         .map(|line| line.split('/').last().unwrap_or(""))
@@ -306,5 +305,8 @@ pub fn fetch_latest_git_tag(
         None => return Err(FetchLatestGitTagError::NoTagsFitFilter),
     };
 
-    Ok(latest_tag.to_string())
+    Ok(latest_tag
+        .strip_prefix(filter)
+        .unwrap_or(latest_tag)
+        .to_string())
 }

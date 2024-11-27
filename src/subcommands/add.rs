@@ -14,6 +14,9 @@ pub struct AddArgs {
     /// Initial version of the package to test for
     #[arg(value_name = "VERSION")]
     initial_version: String,
+    /// Prefix to filter tags by
+    #[arg(long, value_name = "PREFIX")]
+    tag_prefix: Option<String>,
     /// Add the --unpack flag to the prefetch command
     #[arg(short, long)]
     unpack: bool,
@@ -47,9 +50,10 @@ pub fn add(source_file_path: &str, args: AddArgs) -> ExitCode {
 
     let mut new_source = Source::new(&args.initial_version, &args.artifact_url_template)
         .with_unpack(args.unpack)
-        .with_git_url(args.git_repo_url);
+        .with_git_url(args.git_repo_url)
+        .with_tag_prefix(args.tag_prefix);
 
-    let full_url = match new_source.full_url() {
+    let full_url = match new_source.full_url(&args.initial_version) {
         Ok(url) => url,
         Err(e) => {
             error!("{e}");
