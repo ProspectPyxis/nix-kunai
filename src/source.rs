@@ -1,4 +1,3 @@
-use log::info;
 use serde::{Deserialize, Serialize};
 use serde_json::error::Category as JsonErrorCategory;
 use std::collections::BTreeMap;
