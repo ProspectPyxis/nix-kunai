@@ -112,6 +112,14 @@ pub fn edit(
         ExitCode::FAILURE
     } else {
         info!("successfully changed value of `{source_key}` to `{value}` in source {source_name}");
+        if matches!(
+            source_key,
+            EditableSourceKey::ArtifactUrlTemplate
+                | EditableSourceKey::GitUrl
+                | EditableSourceKey::TagPrefix
+        ) {
+            info!("the changed value could affect the hash; consider running `nix-kunai update --refetch {source_name}`");
+        }
         ExitCode::SUCCESS
     }
 }
