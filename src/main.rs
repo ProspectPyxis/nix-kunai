@@ -30,10 +30,11 @@ enum Command {
     Init,
     /// Add a new source
     Add(add::AddArgs),
-    /// Delete an existing source
+    /// Delete existing sources
     Delete {
-        /// Name of the source to delete
-        source_name: String,
+        /// Name of sources to delete
+        #[arg(required = true, value_name = "SOURCES")]
+        source_names: Vec<String>,
     },
 }
 
@@ -45,6 +46,6 @@ fn main() -> ExitCode {
     match cli.command {
         Command::Init => init::init(&cli.source_file),
         Command::Add(args) => add::add(&cli.source_file, args),
-        Command::Delete { source_name } => delete::delete(&cli.source_file, &source_name),
+        Command::Delete { source_names } => delete::delete(&cli.source_file, source_names),
     }
 }
