@@ -1,4 +1,4 @@
-use crate::source::{Source, SourceMap};
+use crate::source::{get_artifact_hash_from_url, Source, SourceMap};
 use clap::Args;
 use log::{error, info};
 use std::process::ExitCode;
@@ -40,7 +40,7 @@ pub fn add(source_file_path: &str, args: AddArgs) -> ExitCode {
 
     let mut new_source = Source::new(&args.initial_version, &args.artifact_url_template);
 
-    new_source.hash = match new_source.get_artifact_hash() {
+    new_source.hash = match get_artifact_hash_from_url(new_source.full_url().as_ref(), false) {
         Ok(hash) => hash,
         Err(e) => {
             error!("{e}");

@@ -18,25 +18,6 @@ pub struct Source {
     pub unpack: bool,
 }
 
-#[derive(Debug, Error)]
-pub enum SourceGetArtifactHashError {
-    #[error("failed to execute command: {full_command}")]
-    CommandFailed {
-        full_command: String,
-        io_error: io::Error,
-    },
-    #[error("could not fetch artifact at {full_url}")]
-    PrefetchFailed { full_url: String },
-    #[error("malformed or incorrect json at line {line}, column {column} of response")]
-    MalformedOrIncorrectJson {
-        line: usize,
-        column: usize,
-        response: Vec<u8>,
-    },
-    #[error("serde failed with an io error: {0}")]
-    SerdeIoError(io::Error),
-}
-
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct PrefetchFileResult {
@@ -63,50 +44,6 @@ impl Source {
         );
         self.artifact_url_template
             .replace("{version}", &version_str)
-    }
-
-    pub fn get_artifact_hash(&self) -> Result<String, SourceGetArtifactHashError> {
-        let full_url = self.full_url();
-
-        let mut args = vec!["store", "prefetch-file", &full_url, "--json"];
-        if self.unpack {
-            args.push("--unpack");
-        }
-
-        info!("fetching artifact from {full_url}");
-        let output = Command::new("nix").args(&args).output().map_err(|e| {
-            SourceGetArtifactHashError::CommandFailed {
-                full_command: format!("nix {}", args.join(" ")),
-                io_error: e,
-            }
-        })?;
-
-        if !output.status.success() {
-            return Err(SourceGetArtifactHashError::PrefetchFailed { full_url });
-        }
-
-        let response: PrefetchFileResult = serde_json::from_slice(&output.stdout).map_err(|e| {
-            if let Some(kind) = e.io_error_kind() {
-                SourceGetArtifactHashError::SerdeIoError(io::Error::new(kind, e))
-            } else {
-                match e.classify() {
-                    JsonErrorCategory::Io => {
-                        SourceGetArtifactHashError::SerdeIoError(io::Error::other(e))
-                    }
-                    JsonErrorCategory::Syntax
-                    | JsonErrorCategory::Data
-                    | JsonErrorCategory::Eof => {
-                        SourceGetArtifactHashError::MalformedOrIncorrectJson {
-                            line: e.line(),
-                            column: e.column(),
-                            response: output.stdout,
-                        }
-                    }
-                }
-            }
-        })?;
-
-        Ok(response.hash)
     }
 }
 
@@ -188,4 +125,63 @@ impl SourceMap {
         self.write_to_writer_pretty(file)
             .map_err(SourceMapWriteToFileError::SerdeWriteError)
     }
+}
+
+#[derive(Debug, Error)]
+pub enum GetArtifactHashError {
+    #[error("failed to execute command: {full_command}")]
+    CommandFailed {
+        full_command: String,
+        io_error: io::Error,
+    },
+    #[error("could not fetch artifact at {url}")]
+    PrefetchFailed { url: String },
+    #[error("malformed or incorrect json at line {line}, column {column} of response")]
+    MalformedOrIncorrectJson {
+        line: usize,
+        column: usize,
+        response: Vec<u8>,
+    },
+    #[error("serde failed with an io error: {0}")]
+    SerdeIoError(io::Error),
+}
+
+pub fn get_artifact_hash_from_url(url: &str, unpack: bool) -> Result<String, GetArtifactHashError> {
+    let mut args = vec!["store", "prefetch-file", &url, "--json"];
+    if unpack {
+        args.push("--unpack");
+    }
+
+    info!("fetching artifact from {url}");
+    let output = Command::new("nix").args(&args).output().map_err(|e| {
+        GetArtifactHashError::CommandFailed {
+            full_command: format!("nix {}", args.join(" ")),
+            io_error: e,
+        }
+    })?;
+
+    if !output.status.success() {
+        return Err(GetArtifactHashError::PrefetchFailed {
+            url: url.to_string(),
+        });
+    }
+
+    let response: PrefetchFileResult = serde_json::from_slice(&output.stdout).map_err(|e| {
+        if let Some(kind) = e.io_error_kind() {
+            GetArtifactHashError::SerdeIoError(io::Error::new(kind, e))
+        } else {
+            match e.classify() {
+                JsonErrorCategory::Io => GetArtifactHashError::SerdeIoError(io::Error::other(e)),
+                JsonErrorCategory::Syntax | JsonErrorCategory::Data | JsonErrorCategory::Eof => {
+                    GetArtifactHashError::MalformedOrIncorrectJson {
+                        line: e.line(),
+                        column: e.column(),
+                        response: output.stdout,
+                    }
+                }
+            }
+        }
+    })?;
+
+    Ok(response.hash)
 }
