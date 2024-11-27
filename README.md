@@ -63,6 +63,11 @@ Asides from that, other goals include:
 - Having a reasonably small code footprint.
 - Having a simple and intuitive user experience.
 
+### Okay, but why is it named `nix-kunai`?
+
+A kunai can be used to pin things,
+and `nix-kunai` can be used to pin the version of sources.
+
 ## Installation
 
 You can easily try out `nix-kunai` on your system without installing anything
@@ -81,22 +86,35 @@ inputs.nix-kunai.packages.${pkgs.hostPlatform.system}.nix-kunai
 
 You can see detailed command help by running `nix-kunai --help`.
 
-Below is an example on how to set up, add, and delete sources:
+Below is an example on how to set up, add, update, and delete sources:
 
 ```sh
 # Initialize a kunai.lock file
 nix-kunai init
 
 # Adds a nix-kunai source named `go-grip`, starting at version v0.3.0
-# Note the --tag-prefix flag
+# Note the `--tag-prefix v` flag, which will strip the leading "v" from fetched tags
 nix-kunai add \
   --tag-prefix v \
   go-grip
   'https://github.com/chrishrb/go-grip/releases/download/v{version}/go-grip-v{version}-linux-amd64.tar.gz'
   0.3.0
 
+# Adds a nix-kunai source named `nixpkgs`, tracking the branch nixos-unstable
+# Note the `--update-scheme static` flag - this allows nix-kunai to update the hash without changing the version
+# Also note the `--unpack` flag, since we're downloading a tarball
+nix-kunai add \
+  --update-scheme static \
+  --unpack \
+  nixpkgs \
+  'https://github.com/NixOS/nixpkgs/archive/{version}.tar.gz' \
+  nixos-unstable
+
 # Update all sources
 nix-kunai update
+
+# Delete the nixpkgs source that was added earlier
+nix-kunai delete nixpkgs
 ```
 
 ### In nix files
