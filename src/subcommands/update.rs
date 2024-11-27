@@ -34,6 +34,7 @@ pub fn update(source_file_path: &str, args: UpdateArgs) -> ExitCode {
     let mut updated = 0;
     let mut up_to_date = 0;
     let mut skipped = 0;
+    let mut errors = 0;
 
     for (name, source) in sources
         .inner
@@ -53,8 +54,9 @@ pub fn update(source_file_path: &str, args: UpdateArgs) -> ExitCode {
                 GetLatestVersionError::GetGitUrlFailed(e) => {
                     error!("could not infer git repository url: {e}");
                     error!("set git_url manually for this source to fix this error");
-                    warn!("skipping source {name}");
+                    warn!("skipping source {name} with an error");
                     skipped += 1;
+                    errors += 1;
                     continue;
                 }
                 GetLatestVersionError::FetchGitTagsFailed(
@@ -65,8 +67,9 @@ pub fn update(source_file_path: &str, args: UpdateArgs) -> ExitCode {
                         source.tag_prefix_filter.as_deref().unwrap_or("")
                     );
                     error!("make sure you've configured tag_prefix correctly");
-                    warn!("skipping source {name}");
+                    warn!("skipping source {name} with an error");
                     skipped += 1;
+                    errors += 1;
                     continue;
                 }
                 _ => {
@@ -90,8 +93,11 @@ pub fn update(source_file_path: &str, args: UpdateArgs) -> ExitCode {
             Ok(url) => url,
             Err(e) => {
                 error!("{e}");
-                error!("this usually implies that the URL template is broken; fix it or remove the offending source");
-                return ExitCode::FAILURE;
+                error!("this usually implies that the artifact URL template is broken; fix it or remove the offending source");
+                warn!("skipping source {name} with an error");
+                skipped += 1;
+                errors += 1;
+                continue;
             }
         };
 
@@ -138,6 +144,7 @@ pub fn update(source_file_path: &str, args: UpdateArgs) -> ExitCode {
                     error!("unexpected error: {e}");
                     error!("skipping source; the command may have to be rerun");
                     skipped += 1;
+                    errors += 1;
                 }
             },
         }
@@ -147,7 +154,7 @@ pub fn update(source_file_path: &str, args: UpdateArgs) -> ExitCode {
         error!("{e}");
         ExitCode::FAILURE
     } else {
-        info!("successfully updated {updated} source(s) ({skipped} failed/skipped, {up_to_date} already up to date)");
+        info!("successfully updated {updated} source(s) ({skipped} skipped ({errors} with errors), {up_to_date} already up to date)");
         ExitCode::SUCCESS
     }
 }
