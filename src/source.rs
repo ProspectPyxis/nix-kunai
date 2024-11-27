@@ -36,6 +36,10 @@ impl Source {
         }
     }
 
+    pub fn with_unpack(self, unpack: bool) -> Self {
+        Self { unpack, ..self }
+    }
+
     pub fn full_url(&self) -> String {
         let version_str = format!(
             "{}{}",
@@ -152,7 +156,6 @@ pub fn get_artifact_hash_from_url(url: &str, unpack: bool) -> Result<String, Get
         args.push("--unpack");
     }
 
-    info!("fetching artifact from {url}");
     let output = Command::new("nix").args(&args).output().map_err(|e| {
         GetArtifactHashError::CommandFailed {
             full_command: format!("nix {}", args.join(" ")),

@@ -38,7 +38,8 @@ pub fn add(source_file_path: &str, args: AddArgs) -> ExitCode {
         return ExitCode::FAILURE;
     }
 
-    let mut new_source = Source::new(&args.initial_version, &args.artifact_url_template);
+    let mut new_source =
+        Source::new(&args.initial_version, &args.artifact_url_template).with_unpack(args.unpack);
 
     new_source.hash = match get_artifact_hash_from_url(new_source.full_url().as_ref(), false) {
         Ok(hash) => hash,
