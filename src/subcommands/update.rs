@@ -1,10 +1,21 @@
 use crate::source::{
     fetch_latest_git_tag, get_artifact_hash_from_url, GetArtifactHashError, SourceMap,
 };
+use clap::Args;
 use log::{error, info, warn};
 use std::process::ExitCode;
 
-pub fn update(source_file_path: &str, source_filter: Vec<String>) -> ExitCode {
+#[derive(Args)]
+pub struct UpdateArgs {
+    /// Specific sources to update
+    #[arg(value_name = "SOURCES")]
+    source_names: Vec<String>,
+    /// Fetch a new hash even if the version is already latest
+    #[arg(long)]
+    pub refetch: bool,
+}
+
+pub fn update(source_file_path: &str, args: UpdateArgs) -> ExitCode {
     let mut sources = match SourceMap::from_file_json(source_file_path) {
         Ok(s) => s,
         Err(e) => {
@@ -12,6 +23,8 @@ pub fn update(source_file_path: &str, source_filter: Vec<String>) -> ExitCode {
             return ExitCode::FAILURE;
         }
     };
+
+    let source_filter = args.source_names;
 
     for source_name in source_filter.iter() {
         if !sources.inner.contains_key(source_name) {
@@ -51,7 +64,7 @@ pub fn update(source_file_path: &str, source_filter: Vec<String>) -> ExitCode {
             }
         };
 
-        if source.latest_checked_version == latest_tag {
+        if source.latest_checked_version == latest_tag && !args.refetch {
             info!("{name} is up to date ({})", source.version);
             up_to_date += 1;
             continue;
@@ -69,9 +82,14 @@ pub fn update(source_file_path: &str, source_filter: Vec<String>) -> ExitCode {
         info!("fetching hash from {full_url}");
         match get_artifact_hash_from_url(&full_url, source.unpack) {
             Ok(hash) => {
-                info!("{name} updated: {} -> {}", source.version, latest_tag);
-                source.hash = hash;
-                source.version = latest_tag.clone();
+                if source.version != latest_tag {
+                    info!("{name} updated: {} -> {}", source.version, latest_tag);
+                    source.hash = hash;
+                    source.version = latest_tag.clone();
+                } else {
+                    info!("{name} refetched successfully (version {latest_tag})");
+                    source.hash = hash;
+                }
                 source.latest_checked_version = latest_tag;
                 updated += 1;
             }
