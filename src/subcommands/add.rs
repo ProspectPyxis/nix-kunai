@@ -27,6 +27,12 @@ pub struct AddArgs {
     /// The version update scheme to use for this source
     #[arg(long, value_enum, value_name = "SCHEME", default_value_t = VersionUpdateScheme::GitTags)]
     update_scheme: VersionUpdateScheme,
+    /// Set the hash to the value provided instead of fetching
+    #[arg(long, value_name = "HASH")]
+    force_hash: Option<String>,
+    /// Mark the source as "pinned", do not update its version
+    #[arg(short, long)]
+    pinned: bool,
 }
 
 fn validate_artifact_url(s: &str) -> Result<String, String> {
@@ -61,21 +67,27 @@ pub fn add(source_file_path: &str, args: AddArgs) -> ExitCode {
     .with_git_url(args.git_repo_url)
     .with_tag_prefix(args.tag_prefix);
 
-    let full_url = match new_source.full_url(&args.initial_version) {
-        Ok(url) => url,
-        Err(e) => {
-            error!("{e}");
-            return ExitCode::FAILURE;
-        }
-    };
-    info!("fetching hash from {full_url}");
-    new_source.hash = match get_artifact_hash_from_url(&full_url, args.unpack) {
-        Ok(hash) => hash,
-        Err(e) => {
-            error!("{e}");
-            return ExitCode::FAILURE;
-        }
-    };
+    new_source.pinned = args.pinned;
+
+    if let Some(hash) = args.force_hash {
+        new_source.hash = hash;
+    } else {
+        let full_url = match new_source.full_url(&args.initial_version) {
+            Ok(url) => url,
+            Err(e) => {
+                error!("{e}");
+                return ExitCode::FAILURE;
+            }
+        };
+        info!("fetching hash from {full_url}");
+        new_source.hash = match get_artifact_hash_from_url(&full_url, args.unpack) {
+            Ok(hash) => hash,
+            Err(e) => {
+                error!("{e}");
+                return ExitCode::FAILURE;
+            }
+        };
+    }
 
     sources.inner.insert(args.source_name.clone(), new_source);
 

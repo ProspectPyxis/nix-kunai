@@ -40,6 +40,12 @@ pub fn update(source_file_path: &str, args: UpdateArgs) -> ExitCode {
         .iter_mut()
         .filter(|(name, _)| source_filter.is_empty() || source_filter.contains(name))
     {
+        if source.pinned {
+            info!("source {name} is pinned; skipping");
+            skipped += 1;
+            continue;
+        }
+
         info!("checking new versions for source: {name}");
         let latest_tag = match source.update_scheme.get_new_version_for(source) {
             Ok(tag) => tag,

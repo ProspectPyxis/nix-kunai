@@ -20,6 +20,7 @@ pub struct Source {
     pub tag_prefix_filter: Option<String>,
     pub unpack: bool,
     pub update_scheme: VersionUpdateScheme,
+    pub pinned: bool,
 }
 
 #[derive(Deserialize)]
