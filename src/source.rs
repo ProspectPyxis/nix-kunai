@@ -66,27 +66,33 @@ impl Source {
         }
     }
 
-    pub fn git_url(&self, infer: bool) -> Result<Option<Url>, InferGitUrlError> {
-        if self.git_url_inner.is_some() {
-            Ok(self.git_url_inner.clone())
+    pub fn git_url(&self, infer: bool) -> Option<Result<Url, InferGitUrlError>> {
+        if let Some(url) = &self.git_url_inner {
+            Some(Ok(url.clone()))
         } else if infer {
-            let mut url = Url::parse(&self.artifact_url_template)?;
+            let mut url = match Url::parse(&self.artifact_url_template) {
+                Ok(url) => url,
+                Err(e) => return Some(Err(e.into())),
+            };
 
-            let mut path_segments = url
-                .path_segments()
-                .ok_or(InferGitUrlError::ArtifactUrlNoBase)?;
-            let owner = path_segments
-                .next()
-                .ok_or(InferGitUrlError::InsufficientPathSegments)?;
-            let repo = path_segments
-                .next()
-                .ok_or(InferGitUrlError::InsufficientPathSegments)?;
+            let mut path_segments = match url.path_segments() {
+                Some(segments) => segments,
+                None => return Some(Err(InferGitUrlError::ArtifactUrlNoBase)),
+            };
+            let owner = match path_segments.next() {
+                Some(segment) => segment,
+                None => return Some(Err(InferGitUrlError::InsufficientPathSegments)),
+            };
+            let repo = match path_segments.next() {
+                Some(segment) => segment,
+                None => return Some(Err(InferGitUrlError::InsufficientPathSegments)),
+            };
 
             url.set_path(&format!("{owner}/{repo}"));
 
-            Ok(Some(url))
+            Some(Ok(url))
         } else {
-            Ok(None)
+            None
         }
     }
 
