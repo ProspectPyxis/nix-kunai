@@ -3,13 +3,14 @@ mod source;
 mod subcommands {
     pub mod add;
     pub mod delete;
+    pub mod edit;
     pub mod init;
     pub mod update;
 }
 mod updater;
 
 use crate::logging::{init_logger, LevelFilterArg};
-use crate::subcommands::{add, delete, init, update};
+use crate::subcommands::{add, delete, edit, init, update};
 use clap::{Parser, Subcommand};
 use std::process::ExitCode;
 
@@ -34,6 +35,13 @@ enum Command {
     Add(add::AddArgs),
     /// Update sources
     Update(update::UpdateArgs),
+    /// Edit a key for an existing source
+    Edit {
+        #[arg(value_name = "SOURCE")]
+        source_name: String,
+        key: edit::EditableSourceKey,
+        value: String,
+    },
     /// Delete existing sources
     Delete {
         /// Name of sources to delete
@@ -49,8 +57,13 @@ fn main() -> ExitCode {
 
     match cli.command {
         Command::Init => init::init(&cli.source_file),
-        Command::Update(args) => update::update(&cli.source_file, args),
         Command::Add(args) => add::add(&cli.source_file, args),
+        Command::Update(args) => update::update(&cli.source_file, args),
+        Command::Edit {
+            source_name,
+            key,
+            value,
+        } => edit::edit(&cli.source_file, &source_name, key, &value),
         Command::Delete { source_names } => delete::delete(&cli.source_file, source_names),
     }
 }

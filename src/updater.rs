@@ -3,6 +3,7 @@ use clap::ValueEnum;
 use serde::{Deserialize, Serialize};
 use std::io;
 use std::process::Command;
+use std::str::FromStr;
 use thiserror::Error;
 use url::Url;
 
@@ -42,6 +43,22 @@ impl VersionUpdateScheme {
     // Static is generally just a huge edge case, so it should be easy to check
     pub fn is_static(&self) -> bool {
         matches!(self, Self::Static)
+    }
+}
+
+#[derive(Debug, Error)]
+#[error("invalid update scheme")]
+pub struct ParseUpdateSchemeError;
+
+impl FromStr for VersionUpdateScheme {
+    type Err = ParseUpdateSchemeError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        Ok(match s {
+            "git-tags" => Self::GitTags,
+            "static" => Self::Static,
+            _ => Err(ParseUpdateSchemeError)?,
+        })
     }
 }
 

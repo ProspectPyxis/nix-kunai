@@ -12,14 +12,15 @@ use url::Url;
 #[derive(Deserialize, Serialize)]
 pub struct Source {
     pub version: String,
+    pub hash: String,
     pub latest_checked_version: String,
     pub artifact_url_template: String,
+    pub update_scheme: VersionUpdateScheme,
     #[serde(rename = "git_url")]
     git_url_inner: Option<Url>,
-    pub hash: String,
+    #[serde(rename = "tag_prefix")]
     pub tag_prefix_filter: Option<String>,
     pub unpack: bool,
-    pub update_scheme: VersionUpdateScheme,
     pub pinned: bool,
 }
 
@@ -60,6 +61,7 @@ impl Source {
             hash: String::new(),
             tag_prefix_filter: None,
             unpack: false,
+            pinned: false,
             update_scheme,
         }
     }
@@ -73,6 +75,10 @@ impl Source {
             git_url_inner: git_url,
             ..self
         }
+    }
+
+    pub fn with_pinned(self, pinned: bool) -> Self {
+        Self { pinned, ..self }
     }
 
     pub fn with_tag_prefix(self, tag_prefix_filter: Option<String>) -> Self {
@@ -110,6 +116,10 @@ impl Source {
         } else {
             None
         }
+    }
+
+    pub fn set_git_url(&mut self, git_url: Option<Url>) {
+        self.git_url_inner = git_url;
     }
 
     pub fn full_url(&self, version: &str) -> Result<Url, BuildFullUrlError> {

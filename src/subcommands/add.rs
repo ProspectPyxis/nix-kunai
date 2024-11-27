@@ -64,6 +64,7 @@ pub fn add(source_file_path: &str, args: AddArgs) -> ExitCode {
         args.update_scheme,
     )
     .with_unpack(args.unpack)
+    .with_pinned(args.pinned)
     .with_git_url(args.git_repo_url)
     .with_tag_prefix(args.tag_prefix);
 
