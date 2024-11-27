@@ -2,36 +2,31 @@
   pkgs,
   lib,
   rustPlatform,
-  openssl,
-  pkg-config,
-}:
-let
+  makeWrapper,
+}: let
   cargoToml = builtins.fromTOML (builtins.readFile ./Cargo.toml);
 
   pname = cargoToml.package.name;
 in
-rustPlatform.buildRustPackage {
-  inherit pname;
-  inherit (cargoToml.package) version; 
+  rustPlatform.buildRustPackage {
+    inherit pname;
+    inherit (cargoToml.package) version;
 
-  src = ./.;
+    src = ./.;
 
-  buildInputs = [
-    openssl
-  ];
-  nativeBuildInputs = [
-    pkg-config
-  ];
+    cargoLock = {
+      lockFile = ./Cargo.lock;
+    };
 
-  cargoLock = {
-    lockFile = ./Cargo.lock;
-  };
+    buildInputs = [
+      makeWrapper
+    ];
 
-  postFixup = ''
-    wrapProgram $out/bin/${pname} \
-      --set PATH ${lib.makeBinPath (with pkgs; [
+    postFixup = ''
+      wrapProgram $out/bin/${pname} \
+        --set PATH ${lib.makeBinPath (with pkgs; [
         nix
         git
       ])}
-  '';
-}
+    '';
+  }
