@@ -55,15 +55,18 @@ impl Source {
         }
     }
 
-    pub fn get_artifact_hash(&self) -> Result<String, SourceGetArtifactHashError> {
+    pub fn full_url(&self) -> String {
         let version_str = format!(
             "{}{}",
             self.tag_prefix_filter.as_deref().unwrap_or(""),
             self.version
         );
-        let full_url = self
-            .artifact_url_template
-            .replace("{version}", &version_str);
+        self.artifact_url_template
+            .replace("{version}", &version_str)
+    }
+
+    pub fn get_artifact_hash(&self) -> Result<String, SourceGetArtifactHashError> {
+        let full_url = self.full_url();
 
         let mut args = vec!["store", "prefetch-file", &full_url, "--json"];
         if self.unpack {
