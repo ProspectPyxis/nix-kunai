@@ -1,24 +1,26 @@
+use log::{error, info};
 use std::fs::File;
 use std::io::{ErrorKind, Write};
-use thiserror::Error;
+use std::process::ExitCode;
 
-#[derive(Debug, Error)]
-pub enum InitError {
-    #[error("source file already exists")]
-    SourceFileExists,
-    #[error("unexpected io error: {0}")]
-    Io(std::io::Error),
-}
+pub fn init(source_file_path: &str) -> ExitCode {
+    let mut source_file = match File::create_new(source_file_path) {
+        Ok(source) => source,
+        Err(e) => {
+            match e.kind() {
+                ErrorKind::NotFound => error!("source file at {source_file_path} already exists"),
+                _ => error!("unexpected io error: {e}"),
+            }
 
-pub fn init(source_file_path: &str) -> Result<(), InitError> {
-    let mut source_file = File::create_new(source_file_path).map_err(|e| match e.kind() {
-        ErrorKind::AlreadyExists => InitError::SourceFileExists,
-        _ => InitError::Io(e),
-    })?;
+            return ExitCode::FAILURE;
+        }
+    };
 
-    source_file
-        .write_all("{}".as_bytes())
-        .map_err(InitError::Io)?;
-
-    Ok(())
+    if let Err(e) = source_file.write_all("{}".as_bytes()) {
+        error!("unexpected io error: {e}");
+        ExitCode::FAILURE
+    } else {
+        info!("successfully created {source_file_path}");
+        ExitCode::SUCCESS
+    }
 }

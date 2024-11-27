@@ -7,12 +7,9 @@ mod subcommands {
 }
 
 use crate::logging::{init_logger, LevelFilterArg};
-use crate::source::SourceMapFromFileJsonError;
-use crate::subcommands::add::AddError;
-use crate::subcommands::delete::DeleteError;
 use crate::subcommands::{add, delete, init};
 use clap::{Parser, Subcommand};
-use log::{error, info};
+use std::process::ExitCode;
 
 #[derive(Parser)]
 #[command(version, about, long_about = None)]
@@ -40,57 +37,14 @@ enum Command {
     },
 }
 
-fn main() {
+fn main() -> ExitCode {
     let cli = Cli::parse();
 
     init_logger(cli.log_level.into());
 
     match cli.command {
-        Command::Init => match init::init(&cli.source_file) {
-            Ok(()) => info!("successfully created {}", cli.source_file),
-            Err(init::InitError::SourceFileExists) => error!("{} already exists", cli.source_file),
-            Err(e) => error!("{e}"),
-        },
-
-        Command::Add(add_args) => match add::add(&cli.source_file, &add_args) {
-            Ok(()) => info!("successfully added new source {}", add_args.source_name),
-            Err(AddError::ReadSourceFromFileFailed(SourceMapFromFileJsonError::NotFound)) => {
-                error!("source file not found at {}", cli.source_file)
-            }
-            Err(AddError::SourceNameAlreadyExists) => {
-                error!("a source named \"{}\" already exists", add_args.source_name);
-                error!("you may be trying to update, or if you want to override the source, delete it first");
-            }
-            Err(
-                e @ AddError::ReadSourceFromFileFailed(
-                    SourceMapFromFileJsonError::MalformedJson { .. }
-                    | SourceMapFromFileJsonError::IncorrectSchema { .. },
-                ),
-            ) => {
-                error!("{e}");
-                error!("you may have to delete and remake the source file");
-            }
-            Err(e) => error!("{e}"),
-        },
-
-        Command::Delete { source_name } => match delete::delete(&cli.source_file, &source_name) {
-            Ok(()) => info!("source \"{source_name}\" has been removed"),
-            Err(DeleteError::ReadSourceFromFileFailed(SourceMapFromFileJsonError::NotFound)) => {
-                error!("source file not found at {}", cli.source_file)
-            }
-            Err(
-                e @ DeleteError::ReadSourceFromFileFailed(
-                    SourceMapFromFileJsonError::MalformedJson { .. }
-                    | SourceMapFromFileJsonError::IncorrectSchema { .. },
-                ),
-            ) => {
-                error!("{e}");
-                error!("you may have to delete and remake the source file");
-            }
-            Err(DeleteError::SourceNameNonexistent) => {
-                error!("no source named \"{source_name}\" exists")
-            }
-            Err(e) => error!("{e}"),
-        },
+        Command::Init => init::init(&cli.source_file),
+        Command::Add(args) => add::add(&cli.source_file, args),
+        Command::Delete { source_name } => delete::delete(&cli.source_file, &source_name),
     }
 }

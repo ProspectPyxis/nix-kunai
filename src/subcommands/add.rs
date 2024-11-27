@@ -1,9 +1,7 @@
-use crate::source::{
-    Source, SourceGetArtifactHashError, SourceMap, SourceMapFromFileJsonError,
-    SourceMapWriteToFileError,
-};
+use crate::source::{Source, SourceMap};
 use clap::Args;
-use thiserror::Error;
+use log::{error, info};
+use std::process::ExitCode;
 
 #[derive(Args, Clone)]
 pub struct AddArgs {
@@ -23,32 +21,40 @@ pub struct AddArgs {
     git_repo_url: Option<String>,
 }
 
-#[derive(Debug, Error)]
-pub enum AddError {
-    #[error(transparent)]
-    ReadSourceFromFileFailed(#[from] SourceMapFromFileJsonError),
-    #[error("a source with this name already exists")]
-    SourceNameAlreadyExists,
-    #[error(transparent)]
-    GetArtifactHashError(#[from] SourceGetArtifactHashError),
-    #[error(transparent)]
-    WriteToFileError(#[from] SourceMapWriteToFileError),
-}
-
-pub fn add(source_file_path: &str, args: &AddArgs) -> Result<(), AddError> {
-    let mut sources = SourceMap::from_file_json(source_file_path)?;
+pub fn add(source_file_path: &str, args: AddArgs) -> ExitCode {
+    let mut sources = match SourceMap::from_file_json(source_file_path) {
+        Ok(s) => s,
+        Err(e) => {
+            error!("{e}");
+            return ExitCode::FAILURE;
+        }
+    };
 
     if sources.inner.contains_key(&args.source_name) {
-        return Err(AddError::SourceNameAlreadyExists);
+        error!("a source called \"{}\" already exists", args.source_name);
+        error!(
+            "you may be trying to update, or if you want to overwrite the source, delete it first"
+        );
+        return ExitCode::FAILURE;
     }
 
     let mut new_source = Source::new(&args.initial_version, &args.artifact_url_template);
 
-    new_source.hash = new_source.get_artifact_hash()?;
+    new_source.hash = match new_source.get_artifact_hash() {
+        Ok(hash) => hash,
+        Err(e) => {
+            error!("{e}");
+            return ExitCode::FAILURE;
+        }
+    };
 
     sources.inner.insert(args.source_name.clone(), new_source);
 
-    sources.write_to_file(source_file_path)?;
-
-    Ok(())
+    if let Err(e) = sources.write_to_file(source_file_path) {
+        error!("{e}");
+        ExitCode::FAILURE
+    } else {
+        info!("added new source \"{}\"", args.source_name);
+        ExitCode::SUCCESS
+    }
 }
