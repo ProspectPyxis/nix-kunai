@@ -24,8 +24,12 @@
     devShells = forEachSystem (pkgs: {
       default = pkgs.mkShellNoCC {
         packages = with pkgs; [
+          # Rust dependencies
           pkg-config
           openssl
+          # Other programs
+          git
+          nix
         ];
       };
     });

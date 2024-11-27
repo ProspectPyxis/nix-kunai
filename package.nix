@@ -1,11 +1,18 @@
 {
+  pkgs,
+  lib,
   rustPlatform,
   openssl,
   pkg-config,
 }:
+let
+  cargoToml = builtins.fromTOML (builtins.readFile ./Cargo.toml);
+
+  pname = cargoToml.package.name;
+in
 rustPlatform.buildRustPackage {
-  pname = "nix-kunai";
-  inherit ((builtins.fromTOML (builtins.readFile ./Cargo.toml)).package) version; 
+  inherit pname;
+  inherit (cargoToml.package) version; 
 
   src = ./.;
 
@@ -19,4 +26,12 @@ rustPlatform.buildRustPackage {
   cargoLock = {
     lockFile = ./Cargo.lock;
   };
+
+  postFixup = ''
+    wrapProgram $out/bin/${pname} \
+      --set PATH ${lib.makeBinPath (with pkgs; [
+        nix
+        git
+      ])}
+  '';
 }
