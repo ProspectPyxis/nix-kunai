@@ -1,6 +1,5 @@
-use crate::source::{
-    fetch_latest_git_tag, get_artifact_hash_from_url, GetArtifactHashError, SourceMap,
-};
+use crate::source::{get_artifact_hash_from_url, GetArtifactHashError, SourceMap};
+use crate::updater::{FetchLatestGitTagError, GetLatestVersionError};
 use clap::Args;
 use log::{error, info, warn};
 use std::process::ExitCode;
@@ -41,31 +40,42 @@ pub fn update(source_file_path: &str, args: UpdateArgs) -> ExitCode {
         .iter_mut()
         .filter(|(name, _)| source_filter.is_empty() || source_filter.contains(name))
     {
-        let git_url = match source
-            .git_url(true)
-            .expect("should never be none thanks to infer = true")
-        {
-            Ok(url) => url,
-            Err(e) => {
-                error!("error while getting git URL of source {name}: {e}");
-                error!("skipping; you may have to manually add a git repo URL or fix the existing link");
-                skipped += 1;
-                continue;
-            }
-        };
-
         info!("checking new versions for source: {name}");
-        let latest_tag = match fetch_latest_git_tag(&git_url, source.tag_prefix_filter.as_deref()) {
+        let latest_tag = match source.update_scheme.get_new_version_for(source) {
             Ok(tag) => tag,
-            Err(e) => {
-                error!("failed to fetch tags for source {name}: {e}");
-                error!("critical error encountered; aborting update");
-                return ExitCode::FAILURE;
-            }
+            Err(e) => match e {
+                GetLatestVersionError::GetGitUrlFailed(e) => {
+                    error!("could not infer git repository url: {e}");
+                    error!("set git_url manually for this source to fix this error");
+                    warn!("skipping source {name}");
+                    skipped += 1;
+                    continue;
+                }
+                GetLatestVersionError::FetchGitTagsFailed(
+                    FetchLatestGitTagError::NoTagsFitFilter,
+                ) => {
+                    error!(
+                        "no tags found that fit the tag filter `{}`",
+                        source.tag_prefix_filter.as_deref().unwrap_or("")
+                    );
+                    error!("make sure you've configured tag_prefix correctly");
+                    warn!("skipping source {name}");
+                    skipped += 1;
+                    continue;
+                }
+                _ => {
+                    error!("failed to fetch new version for source {name}: {e}");
+                    error!("critical error encountered; aborting update");
+                    return ExitCode::FAILURE;
+                }
+            },
         };
 
-        if source.latest_checked_version == latest_tag && !args.refetch {
-            info!("{name} is up to date ({})", source.version);
+        if !source.update_scheme.is_static()
+            && !args.refetch
+            && source.latest_checked_version == latest_tag
+        {
+            info!("{name} is up to date (version {})", source.version);
             up_to_date += 1;
             continue;
         }
@@ -86,13 +96,28 @@ pub fn update(source_file_path: &str, args: UpdateArgs) -> ExitCode {
                     info!("{name} updated: {} -> {}", source.version, latest_tag);
                     source.hash = hash;
                     source.version = latest_tag.clone();
-                } else {
-                    info!("{name} refetched successfully (version {latest_tag})");
+                    updated += 1;
+                } else if source.hash != hash {
+                    if source.update_scheme.is_static() {
+                        info!(
+                            "updated hash for source {name} with static version {}",
+                            source.version
+                        );
+                    } else {
+                        info!("hash for source {name} changed, but with the same version (version {})", source.version);
+                    }
                     source.hash = hash;
+                    updated += 1;
+                } else {
+                    info!(
+                        "{name} is up to date (same hash) (version {})",
+                        source.version
+                    );
+                    up_to_date += 1;
                 }
                 source.latest_checked_version = latest_tag;
-                updated += 1;
             }
+
             Err(e) => match e {
                 GetArtifactHashError::PrefetchFailed { .. } => {
                     warn!(

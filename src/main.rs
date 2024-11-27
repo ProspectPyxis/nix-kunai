@@ -6,6 +6,7 @@ mod subcommands {
     pub mod init;
     pub mod update;
 }
+mod updater;
 
 use crate::logging::{init_logger, LevelFilterArg};
 use crate::subcommands::{add, delete, init, update};

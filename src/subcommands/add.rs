@@ -1,4 +1,5 @@
 use crate::source::{get_artifact_hash_from_url, Source, SourceMap};
+use crate::updater::VersionUpdateScheme;
 use clap::Args;
 use log::{error, info};
 use std::process::ExitCode;
@@ -23,6 +24,9 @@ pub struct AddArgs {
     /// Check this git repo instead of inferring from artifact url
     #[arg(long, value_name = "REPOSITORY")]
     git_repo_url: Option<Url>,
+    /// The version update scheme to use for this source
+    #[arg(long, value_enum, value_name = "SCHEME", default_value_t = VersionUpdateScheme::GitTags)]
+    update_scheme: VersionUpdateScheme,
 }
 
 fn validate_artifact_url(s: &str) -> Result<String, String> {
@@ -48,10 +52,14 @@ pub fn add(source_file_path: &str, args: AddArgs) -> ExitCode {
         return ExitCode::FAILURE;
     }
 
-    let mut new_source = Source::new(&args.initial_version, &args.artifact_url_template)
-        .with_unpack(args.unpack)
-        .with_git_url(args.git_repo_url)
-        .with_tag_prefix(args.tag_prefix);
+    let mut new_source = Source::new(
+        &args.initial_version,
+        &args.artifact_url_template,
+        args.update_scheme,
+    )
+    .with_unpack(args.unpack)
+    .with_git_url(args.git_repo_url)
+    .with_tag_prefix(args.tag_prefix);
 
     let full_url = match new_source.full_url(&args.initial_version) {
         Ok(url) => url,
