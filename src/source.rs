@@ -26,10 +26,20 @@ struct PrefetchFileResult {
 }
 
 #[derive(Debug, Error)]
-#[error("constructed full url {full_url} is invalid: {parse_error}")]
+#[error("constructed full URL {full_url} is invalid: {parse_error}")]
 pub struct BuildFullUrlError {
     full_url: String,
     parse_error: url::ParseError,
+}
+
+#[derive(Debug, Error)]
+pub enum InferGitUrlError {
+    #[error("could not parse URL template: {0}")]
+    CouldNotParseUrlTemplate(#[from] url::ParseError),
+    #[error("artifact URL does not have a base")]
+    ArtifactUrlNoBase,
+    #[error("insufficient path segments to infer URL")]
+    InsufficientPathSegments,
 }
 
 impl Source {
@@ -56,14 +66,28 @@ impl Source {
         }
     }
 
-    pub fn git_url(&self, infer: bool) -> Option<Url> {
-        self.git_url_inner.clone().or_else(|| {
-            if infer {
-                Some(Url::parse("https://example.com").expect("example.com should always be valid"))
-            } else {
-                None
-            }
-        })
+    pub fn git_url(&self, infer: bool) -> Result<Option<Url>, InferGitUrlError> {
+        if self.git_url_inner.is_some() {
+            Ok(self.git_url_inner.clone())
+        } else if infer {
+            let mut url = Url::parse(&self.artifact_url_template)?;
+
+            let mut path_segments = url
+                .path_segments()
+                .ok_or(InferGitUrlError::ArtifactUrlNoBase)?;
+            let owner = path_segments
+                .next()
+                .ok_or(InferGitUrlError::InsufficientPathSegments)?;
+            let repo = path_segments
+                .next()
+                .ok_or(InferGitUrlError::InsufficientPathSegments)?;
+
+            url.set_path(&format!("{owner}/{repo}"));
+
+            Ok(Some(url))
+        } else {
+            Ok(None)
+        }
     }
 
     pub fn full_url(&self) -> Result<Url, BuildFullUrlError> {
