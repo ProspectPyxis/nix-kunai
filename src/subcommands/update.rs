@@ -19,6 +19,10 @@ pub fn update(source_file_path: &str, source_filter: Vec<String>) -> ExitCode {
         }
     }
 
+    let mut updated = 0;
+    let mut up_to_date = 0;
+    let mut skipped = 0;
+
     for (name, source) in sources
         .inner
         .iter_mut()
@@ -32,6 +36,7 @@ pub fn update(source_file_path: &str, source_filter: Vec<String>) -> ExitCode {
             Err(e) => {
                 error!("error while getting git URL of source {name}: {e}");
                 error!("skipping; you may have to manually add a git repo URL or fix the existing link");
+                skipped += 1;
                 continue;
             }
         };
@@ -47,7 +52,8 @@ pub fn update(source_file_path: &str, source_filter: Vec<String>) -> ExitCode {
         };
 
         if source.latest_checked_version == latest_tag {
-            info!("{name} is up to date ({latest_tag})");
+            info!("{name} is up to date ({})", source.version);
+            up_to_date += 1;
             continue;
         }
 
@@ -67,23 +73,32 @@ pub fn update(source_file_path: &str, source_filter: Vec<String>) -> ExitCode {
                 source.hash = hash;
                 source.version = latest_tag.clone();
                 source.latest_checked_version = latest_tag;
+                updated += 1;
             }
             Err(e) => match e {
                 GetArtifactHashError::PrefetchFailed { .. } => {
-                    warn!("{e}");
                     warn!(
-                        "assuming non-release tag; version will not be updated {}",
+                        "found newer tag {latest_tag} (> {}), but {e}",
                         source.version
                     );
+                    warn!("assuming non-release tag; version will not be updated");
                     source.latest_checked_version = latest_tag;
+                    up_to_date += 1;
                 }
                 _ => {
                     error!("unexpected error: {e}");
                     error!("skipping source; the command may have to be rerun");
+                    skipped += 1;
                 }
             },
         }
     }
 
-    ExitCode::SUCCESS
+    if let Err(e) = sources.write_to_file(source_file_path) {
+        error!("{e}");
+        ExitCode::FAILURE
+    } else {
+        info!("successfully updated {updated} source(s) ({skipped} failed/skipped, {up_to_date} already up to date)");
+        ExitCode::SUCCESS
+    }
 }
