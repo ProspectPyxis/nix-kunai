@@ -4,10 +4,11 @@ mod subcommands {
     pub mod add;
     pub mod delete;
     pub mod init;
+    pub mod update;
 }
 
 use crate::logging::{init_logger, LevelFilterArg};
-use crate::subcommands::{add, delete, init};
+use crate::subcommands::{add, delete, init, update};
 use clap::{Parser, Subcommand};
 use std::process::ExitCode;
 
@@ -30,6 +31,12 @@ enum Command {
     Init,
     /// Add a new source
     Add(add::AddArgs),
+    /// Update sources
+    Update {
+        /// Specific sources to update
+        #[arg(value_name = "SOURCES")]
+        source_names: Vec<String>,
+    },
     /// Delete existing sources
     Delete {
         /// Name of sources to delete
@@ -45,6 +52,7 @@ fn main() -> ExitCode {
 
     match cli.command {
         Command::Init => init::init(&cli.source_file),
+        Command::Update { source_names } => update::update(&cli.source_file, source_names),
         Command::Add(args) => add::add(&cli.source_file, args),
         Command::Delete { source_names } => delete::delete(&cli.source_file, source_names),
     }
