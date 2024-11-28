@@ -51,7 +51,7 @@ pub fn add(source_file_path: &str, args: AddArgs) -> ExitCode {
     };
 
     if sources.inner.contains_key(&args.source_name) {
-        error!("a source called \"{}\" already exists", args.source_name);
+        error!("a source called {} already exists", args.source_name);
         error!(
             "you may be trying to update, or if you want to overwrite the source, delete it first"
         );
@@ -96,7 +96,7 @@ pub fn add(source_file_path: &str, args: AddArgs) -> ExitCode {
         error!("{e}");
         ExitCode::FAILURE
     } else {
-        info!("added new source \"{}\"", args.source_name);
+        info!("added new source {}", args.source_name);
         ExitCode::SUCCESS
     }
 }

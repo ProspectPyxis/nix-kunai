@@ -27,7 +27,7 @@ pub fn update(source_file_path: &str, args: UpdateArgs) -> ExitCode {
 
     for source_name in source_filter.iter() {
         if !sources.inner.contains_key(source_name) {
-            warn!("source \"{source_name}\" does not exist, skipping");
+            warn!("source {source_name} does not exist, skipping");
         }
     }
 

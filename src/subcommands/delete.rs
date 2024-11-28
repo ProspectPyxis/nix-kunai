@@ -13,7 +13,7 @@ pub fn delete(source_file_path: &str, source_names: Vec<String>) -> ExitCode {
 
     for source_name in &source_names {
         if sources.inner.remove(source_name).is_none() {
-            error!("a source named \"{source_name}\" does not exist");
+            error!("a source named {source_name} does not exist");
             return ExitCode::FAILURE;
         }
     }
@@ -23,7 +23,7 @@ pub fn delete(source_file_path: &str, source_names: Vec<String>) -> ExitCode {
         ExitCode::FAILURE
     } else {
         if source_names.len() == 1 {
-            info!("source \"{}\" has been removed", source_names[0]);
+            info!("source {} has been removed", source_names[0]);
         } else {
             info!("removed sources: {}", source_names.join(", "));
         }
