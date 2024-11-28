@@ -10,8 +10,11 @@ pub struct UpdateArgs {
     #[arg(value_name = "SOURCES")]
     source_names: Vec<String>,
     /// Fetch a new hash even if the version is already latest
-    #[arg(long)]
+    #[arg(short, long)]
     pub refetch: bool,
+    /// Force update checking even if the source is pinned
+    #[arg(short, long)]
+    pub force: bool,
 }
 
 pub fn update(source_file_path: &str, args: UpdateArgs) -> ExitCode {
@@ -41,7 +44,7 @@ pub fn update(source_file_path: &str, args: UpdateArgs) -> ExitCode {
         .iter_mut()
         .filter(|(name, _)| source_filter.is_empty() || source_filter.contains(name))
     {
-        if source.pinned {
+        if source.pinned && !args.force {
             info!("source {name} is pinned; skipping");
             skipped += 1;
             continue;
