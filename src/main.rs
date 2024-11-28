@@ -37,9 +37,12 @@ enum Command {
     Update(update::UpdateArgs),
     /// Edit a key for an existing source
     Edit {
+        /// Name of the source to edit
         #[arg(value_name = "SOURCE")]
         source_name: String,
+        /// Key to edit
         key: edit::EditableSourceKey,
+        /// Value to change the key to, valid values depend on key
         value: String,
     },
     /// Delete existing sources
