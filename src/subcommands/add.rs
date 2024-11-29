@@ -1,5 +1,6 @@
 use crate::source::{get_artifact_hash_from_url, Source, SourceMap};
 use crate::updater::VersionUpdateScheme;
+use crate::Cli;
 use clap::Args;
 use log::{error, info};
 use std::process::ExitCode;
@@ -9,30 +10,36 @@ use url::Url;
 pub struct AddArgs {
     /// The name of the source
     pub source_name: String,
-    /// The url to fetch from for a hash, where {version} replaces the version number
+    /// The url to fetch from for a hash, where {version} will be replaced by the version number
     #[arg(value_name = "ARTIFACT_URL", value_parser = validate_artifact_url)]
     artifact_url_template: String,
     /// Initial version of the package to test for
     #[arg(value_name = "VERSION")]
     initial_version: String,
-    /// Prefix to filter tags by
-    #[arg(long, value_name = "PREFIX")]
-    tag_prefix: Option<String>,
     /// Add the --unpack flag to the prefetch command
     #[arg(short, long)]
     unpack: bool,
-    /// Check this git repo instead of inferring from artifact url
-    #[arg(long, value_name = "REPOSITORY")]
-    git_repo_url: Option<Url>,
-    /// The version update scheme to use for this source
-    #[arg(long, value_enum, value_name = "SCHEME", default_value_t = VersionUpdateScheme::GitTags)]
-    update_scheme: VersionUpdateScheme,
     /// Set the hash to the value provided instead of fetching
     #[arg(long, value_name = "HASH")]
     force_hash: Option<String>,
     /// Mark the source as "pinned", do not update its version
     #[arg(short, long)]
     pinned: bool,
+    /// The version update scheme to use for this source
+    #[arg(long, value_enum, value_name = "SCHEME", default_value_t = VersionUpdateScheme::GitTags)]
+    update_scheme: VersionUpdateScheme,
+    /// Prefix to filter tags by
+    #[arg(
+        help_heading = Some("Options for --update-scheme git-tags"),
+        long, value_name = "PREFIX"
+    )]
+    tag_prefix: Option<String>,
+    /// Check this git repo instead of inferring from artifact url
+    #[arg(
+        help_heading = Some("Options for --update-scheme git-tags"),
+        long, value_name = "REPOSITORY"
+    )]
+    git_repo_url: Option<Url>,
 }
 
 fn validate_artifact_url(s: &str) -> Result<String, String> {
@@ -41,7 +48,39 @@ fn validate_artifact_url(s: &str) -> Result<String, String> {
     Ok(s.to_string())
 }
 
+fn validate_add_args(args: &AddArgs) {
+    use clap::error::{Error, ErrorKind, RichFormatter};
+    use clap::CommandFactory;
+
+    let make_arg_conflict_error = |msg| {
+        let cmd = Cli::command();
+        // We use this custom message and a raw error here
+        // because otherwise clap will show the base command usage,
+        // making it just a little less seamless
+        let msg = format!(
+            "{msg}\n\n{}\n",
+            color_print::cstr!("For more information, try <bold>'--help'</bold>.")
+        );
+        Error::<RichFormatter>::raw(ErrorKind::ArgumentConflict, msg).with_cmd(&cmd)
+    };
+
+    if !matches!(args.update_scheme, VersionUpdateScheme::GitTags) {
+        let error_str = format!(
+            "{} can't be specified without --update-scheme git-tags",
+            match args {
+                _ if args.tag_prefix.is_some() => "--tag-prefix",
+                _ if args.git_repo_url.is_some() => "--git-repo-url",
+                _ => return,
+            },
+        );
+
+        make_arg_conflict_error(error_str).exit();
+    }
+}
+
 pub fn add(source_file_path: &str, args: AddArgs) -> ExitCode {
+    validate_add_args(&args);
+
     let mut sources = match SourceMap::from_file_json(source_file_path) {
         Ok(s) => s,
         Err(e) => {

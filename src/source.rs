@@ -15,13 +15,13 @@ pub struct Source {
     pub hash: String,
     pub latest_checked_version: String,
     pub artifact_url_template: String,
+    pub unpack: bool,
+    pub pinned: bool,
     pub update_scheme: VersionUpdateScheme,
-    #[serde(rename = "git_url")]
+    #[serde(rename = "git_url", skip_serializing_if = "Option::is_none")]
     git_url_inner: Option<Url>,
     #[serde(rename = "tag_prefix")]
     pub tag_prefix_filter: Option<String>,
-    pub unpack: bool,
-    pub pinned: bool,
 }
 
 #[derive(Deserialize)]

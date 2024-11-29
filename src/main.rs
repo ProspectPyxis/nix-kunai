@@ -16,7 +16,7 @@ use std::process::ExitCode;
 
 #[derive(Parser)]
 #[command(version, about, long_about = None)]
-struct Cli {
+pub struct Cli {
     /// Path and filename of the source file
     #[arg(long, default_value = "kunai.lock")]
     source_file: String,

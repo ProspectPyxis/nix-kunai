@@ -1,6 +1,7 @@
 use crate::source::{InferGitUrlError, Source};
 use clap::ValueEnum;
 use serde::{Deserialize, Serialize};
+use std::fmt;
 use std::io;
 use std::process::Command;
 use std::str::FromStr;
@@ -8,7 +9,7 @@ use thiserror::Error;
 use url::Url;
 
 #[derive(Clone, Copy, Deserialize, Serialize, ValueEnum)]
-#[serde(rename_all = "kebab-case")]
+#[serde(rename_all = "kebab-case", tag = "scheme_type")]
 pub enum VersionUpdateScheme {
     GitTags,
     Static,
@@ -43,6 +44,19 @@ impl VersionUpdateScheme {
     // Static is generally just a huge edge case, so it should be easy to check
     pub fn is_static(&self) -> bool {
         matches!(self, Self::Static)
+    }
+}
+
+impl fmt::Display for VersionUpdateScheme {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "{}",
+            match self {
+                VersionUpdateScheme::GitTags => "git-tags",
+                VersionUpdateScheme::Static => "static",
+            }
+        )
     }
 }
 
