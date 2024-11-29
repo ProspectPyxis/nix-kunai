@@ -2,11 +2,6 @@
 
 > *Yet another nix dependency manager - simple code, but robust handling.*
 
-> [!WARNING]
-> While `nix-kunai` is currently fully functional,
-> it does *not* currently guarantee any stability in its JSON format.
-> Hopefully this will change very soon, but until then, *caveat emptor.*
-
 ## Why?
 
 If you're making your own derivations,

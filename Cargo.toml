@@ -1,6 +1,10 @@
 [package]
 name = "nix-kunai"
-version = "0.1.0"
+# This project is rolling-release.
+# The version is based on [Calendar Versioning](https://calver.org)
+# With a scheme of YYYY.MM.MICRO.
+version = "2024.11.0"
+description = "Yet another nix dependency manager - simple code, but robust handling."
 edition = "2021"
 license = "GPL-3.0-or-later"
 
