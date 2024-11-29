@@ -36,6 +36,10 @@ enum Command {
     /// Update sources
     Update(update::UpdateArgs),
     /// Edit a key for an existing source
+    ///
+    /// Note that the 'update-scheme' key and its members cannot be edited by this command.
+    /// If you wish to change it, it is recommended to copy the hash, delete the existing source,
+    /// and re-add it with the '--force-hash' flag to skip an unnecessary refetch.
     Edit {
         /// Name of the source to edit
         #[arg(value_name = "SOURCE")]
