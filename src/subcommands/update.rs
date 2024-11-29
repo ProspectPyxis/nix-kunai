@@ -56,7 +56,7 @@ pub fn update(source_file_path: &str, args: UpdateArgs) -> ExitCode {
             Err(e) => match e {
                 GetLatestVersionError::GetGitUrlFailed(e) => {
                     error!("could not infer git repository url: {e}");
-                    error!("set git_url manually for this source to fix this error");
+                    error!("git_url may need to be set manually; if so, remove and re-add this source with the correct options");
                     warn!("skipping source {name} with an error");
                     skipped += 1;
                     errors += 1;
@@ -67,10 +67,10 @@ pub fn update(source_file_path: &str, args: UpdateArgs) -> ExitCode {
                     tag_prefix,
                 } => {
                     error!(
-                        "no tags found that fit the tag filter `{}`",
+                        "no tags found that fit the tag prefix `{}`",
                         tag_prefix.as_deref().unwrap_or("")
                     );
-                    error!("make sure you've configured tag_prefix correctly");
+                    error!("tag_prefix may be set incorrectly; if so, remove and re-add this source with the correct options");
                     warn!("skipping source {name} with an error");
                     skipped += 1;
                     errors += 1;
@@ -105,7 +105,14 @@ pub fn update(source_file_path: &str, args: UpdateArgs) -> ExitCode {
             }
         };
 
-        info!("fetching hash from {full_url}");
+        info!(
+            "{}fetching hash from {full_url}",
+            if source.version == latest_tag && args.refetch {
+                "re"
+            } else {
+                ""
+            }
+        );
         match get_artifact_hash_from_url(&full_url, source.unpack) {
             Ok(hash) => {
                 if source.version != latest_tag {
