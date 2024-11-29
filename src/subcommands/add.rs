@@ -52,29 +52,31 @@ fn validate_add_args(args: &AddArgs) {
     use clap::error::{Error, ErrorKind, RichFormatter};
     use clap::CommandFactory;
 
-    let make_arg_conflict_error = |msg| {
+    let update_scheme_conflict_error = |bad_arg| {
         let cmd = Cli::command();
         // We use this custom message and a raw error here
         // because otherwise clap will show the base command usage,
         // making it just a little less seamless
-        let msg = format!(
-            "{msg}\n\n{}\n",
-            color_print::cstr!("For more information, try <bold>'--help'</bold>.")
+        let msg = color_print::cformat!(
+            "the argument '<yellow>{bad_arg}</yellow>' \
+            cannot be used with '<bold>--update-scheme {}</bold>'\
+            \n\n\
+            For more information, try '<bold>--help</bold>'.\n",
+            args.update_scheme
         );
         Error::<RichFormatter>::raw(ErrorKind::ArgumentConflict, msg).with_cmd(&cmd)
     };
 
-    if !matches!(args.update_scheme, VersionUpdateScheme::GitTags) {
-        let error_str = format!(
-            "{} can't be specified without --update-scheme git-tags",
-            match args {
-                _ if args.tag_prefix.is_some() => "--tag-prefix",
-                _ if args.git_repo_url.is_some() => "--git-repo-url",
-                _ => return,
-            },
-        );
+    if !matches!(args.update_scheme, VersionUpdateScheme::GitTags)
+        && (args.tag_prefix.is_some() || args.git_repo_url.is_some())
+    {
+        let bad_arg = match args {
+            _ if args.tag_prefix.is_some() => "--tag-prefix",
+            _ if args.git_repo_url.is_some() => "--git-repo-url",
+            _ => unreachable!(),
+        };
 
-        make_arg_conflict_error(error_str).exit();
+        update_scheme_conflict_error(bad_arg).exit();
     }
 }
 
