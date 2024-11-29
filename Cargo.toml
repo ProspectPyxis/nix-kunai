@@ -7,6 +7,7 @@ license = "GPL-3.0-or-later"
 [dependencies]
 log = "0.4"
 env_logger = "0.11"
+color-print = "0.3"
 thiserror = "2.0"
 url = { version = "2.5", features = ["serde"] }
 clap = { version = "4.5", features = ["derive"] }
