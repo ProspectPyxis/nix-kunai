@@ -37,16 +37,6 @@ pub struct BuildFullUrlError {
     parse_error: url::ParseError,
 }
 
-#[derive(Debug, Error)]
-pub enum InferGitUrlError {
-    #[error("could not parse URL template: {0}")]
-    CouldNotParseUrlTemplate(#[from] url::ParseError),
-    #[error("artifact URL does not have a base")]
-    ArtifactUrlNoBase,
-    #[error("insufficient path segments to infer URL")]
-    InsufficientPathSegments,
-}
-
 impl Source {
     pub fn new(
         version: &str,
@@ -70,52 +60,8 @@ impl Source {
         Self { unpack, ..self }
     }
 
-    pub fn with_git_url(self, git_url: Option<Url>) -> Self {
-        Self {
-            git_url_inner: git_url,
-            ..self
-        }
-    }
-
     pub fn with_pinned(self, pinned: bool) -> Self {
         Self { pinned, ..self }
-    }
-
-    pub fn with_tag_prefix(self, tag_prefix_filter: Option<String>) -> Self {
-        Self {
-            tag_prefix_filter,
-            ..self
-        }
-    }
-
-    pub fn git_url(&self, infer: bool) -> Option<Result<Url, InferGitUrlError>> {
-        if let Some(url) = &self.git_url_inner {
-            Some(Ok(url.clone()))
-        } else if infer {
-            let mut url = match Url::parse(&self.artifact_url_template) {
-                Ok(url) => url,
-                Err(e) => return Some(Err(e.into())),
-            };
-
-            let mut path_segments = match url.path_segments() {
-                Some(segments) => segments,
-                None => return Some(Err(InferGitUrlError::ArtifactUrlNoBase)),
-            };
-            let owner = match path_segments.next() {
-                Some(segment) => segment,
-                None => return Some(Err(InferGitUrlError::InsufficientPathSegments)),
-            };
-            let repo = match path_segments.next() {
-                Some(segment) => segment,
-                None => return Some(Err(InferGitUrlError::InsufficientPathSegments)),
-            };
-
-            url.set_path(&format!("{owner}/{repo}"));
-
-            Some(Ok(url))
-        } else {
-            None
-        }
     }
 
     pub fn set_git_url(&mut self, git_url: Option<Url>) {

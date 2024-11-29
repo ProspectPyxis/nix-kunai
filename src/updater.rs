@@ -1,17 +1,17 @@
-use crate::source::{InferGitUrlError, Source};
-use clap::ValueEnum;
+use crate::source::Source;
 use serde::{Deserialize, Serialize};
-use std::fmt;
 use std::io;
 use std::process::Command;
-use std::str::FromStr;
 use thiserror::Error;
 use url::Url;
 
-#[derive(Clone, Copy, Deserialize, Serialize, ValueEnum)]
-#[serde(rename_all = "kebab-case", tag = "scheme_type")]
+#[derive(Clone, Deserialize, Serialize)]
+#[serde(rename_all = "kebab-case", tag = "type")]
 pub enum VersionUpdateScheme {
-    GitTags,
+    GitTags {
+        repo_url: Option<Url>,
+        tag_prefix: Option<String>,
+    },
     Static,
 }
 
@@ -26,15 +26,16 @@ pub enum GetLatestVersionError {
 impl VersionUpdateScheme {
     pub fn get_new_version_for(&self, source: &Source) -> Result<String, GetLatestVersionError> {
         match self {
-            Self::GitTags => {
-                let git_url = source
-                    .git_url(true)
-                    .expect("should never be None thanks to infer = true")?;
+            Self::GitTags {
+                repo_url,
+                tag_prefix,
+            } => {
+                let git_url = repo_url.as_ref().map_or_else(
+                    || infer_git_url(&source.artifact_url_template),
+                    |url| Ok(url.clone()),
+                )?;
 
-                Ok(fetch_latest_git_tag(
-                    &git_url,
-                    source.tag_prefix_filter.as_deref(),
-                )?)
+                Ok(fetch_latest_git_tag(&git_url, tag_prefix.as_deref())?)
             }
 
             Self::Static => Ok(source.version.clone()),
@@ -44,35 +45,6 @@ impl VersionUpdateScheme {
     // Static is generally just a huge edge case, so it should be easy to check
     pub fn is_static(&self) -> bool {
         matches!(self, Self::Static)
-    }
-}
-
-impl fmt::Display for VersionUpdateScheme {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(
-            f,
-            "{}",
-            match self {
-                VersionUpdateScheme::GitTags => "git-tags",
-                VersionUpdateScheme::Static => "static",
-            }
-        )
-    }
-}
-
-#[derive(Debug, Error)]
-#[error("invalid update scheme")]
-pub struct ParseUpdateSchemeError;
-
-impl FromStr for VersionUpdateScheme {
-    type Err = ParseUpdateSchemeError;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        Ok(match s {
-            "git-tags" => Self::GitTags,
-            "static" => Self::Static,
-            _ => Err(ParseUpdateSchemeError)?,
-        })
     }
 }
 
@@ -87,6 +59,34 @@ pub enum FetchLatestGitTagError {
     CommandOutputInvalidUtf8(#[from] std::string::FromUtf8Error),
     #[error("no tag fits the provided filter")]
     NoTagsFitFilter,
+}
+
+#[derive(Debug, Error)]
+pub enum InferGitUrlError {
+    #[error("could not parse URL template: {0}")]
+    CouldNotParseUrlTemplate(#[from] url::ParseError),
+    #[error("artifact URL does not have a base")]
+    ArtifactUrlNoBase,
+    #[error("insufficient path segments to infer URL")]
+    InsufficientPathSegments,
+}
+
+pub fn infer_git_url(from: &str) -> Result<Url, InferGitUrlError> {
+    let mut url = Url::parse(from)?;
+
+    let mut path_segments = url
+        .path_segments()
+        .ok_or(InferGitUrlError::ArtifactUrlNoBase)?;
+    let owner = path_segments
+        .next()
+        .ok_or(InferGitUrlError::InsufficientPathSegments)?;
+    let repo = path_segments
+        .next()
+        .ok_or(InferGitUrlError::InsufficientPathSegments)?;
+
+    url.set_path(&format!("{owner}/{repo}"));
+
+    Ok(url)
 }
 
 pub fn fetch_latest_git_tag(

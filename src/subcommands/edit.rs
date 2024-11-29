@@ -13,7 +13,6 @@ pub enum EditableSourceKey {
     GitUrl,
     TagPrefix,
     Unpack,
-    UpdateScheme,
 }
 
 impl fmt::Display for EditableSourceKey {
@@ -27,7 +26,6 @@ impl fmt::Display for EditableSourceKey {
                 Self::GitUrl => "git_url",
                 Self::TagPrefix => "tag_prefix",
                 Self::Unpack => "unpack",
-                Self::UpdateScheme => "update_scheme",
             }
         )
     }
@@ -95,13 +93,6 @@ pub fn edit(
             Ok(v) => source.unpack = v,
             Err(_) => {
                 error!("invalid value `{value}` for key {source_key} (must be `true` or `false`)");
-                return ExitCode::FAILURE;
-            }
-        },
-        EditableSourceKey::UpdateScheme => match value.parse() {
-            Ok(v) => source.update_scheme = v,
-            Err(_) => {
-                error!("invalid value `{value}` for key {source_key} (must be one of `git-tags`, `static`)");
                 return ExitCode::FAILURE;
             }
         },

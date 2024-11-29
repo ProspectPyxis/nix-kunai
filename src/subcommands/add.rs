@@ -1,8 +1,9 @@
 use crate::source::{get_artifact_hash_from_url, Source, SourceMap};
 use crate::updater::VersionUpdateScheme;
 use crate::Cli;
-use clap::Args;
+use clap::{Args, ValueEnum};
 use log::{error, info};
+use std::fmt;
 use std::process::ExitCode;
 use url::Url;
 
@@ -26,8 +27,8 @@ pub struct AddArgs {
     #[arg(short, long)]
     pinned: bool,
     /// The version update scheme to use for this source
-    #[arg(long, value_enum, value_name = "SCHEME", default_value_t = VersionUpdateScheme::GitTags)]
-    update_scheme: VersionUpdateScheme,
+    #[arg(long, value_enum, value_name = "SCHEME", default_value_t = UpdateSchemeArg::GitTags)]
+    update_scheme: UpdateSchemeArg,
     /// Prefix to filter tags by
     #[arg(
         help_heading = Some("Options for --update-scheme git-tags"),
@@ -40,6 +41,25 @@ pub struct AddArgs {
         long, value_name = "REPOSITORY"
     )]
     git_repo_url: Option<Url>,
+}
+
+#[derive(Clone, ValueEnum)]
+enum UpdateSchemeArg {
+    GitTags,
+    Static,
+}
+
+impl fmt::Display for UpdateSchemeArg {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "{}",
+            match self {
+                Self::GitTags => "git-tags",
+                Self::Static => "static",
+            }
+        )
+    }
 }
 
 fn validate_artifact_url(s: &str) -> Result<String, String> {
@@ -67,7 +87,7 @@ fn validate_add_args(args: &AddArgs) {
         Error::<RichFormatter>::raw(ErrorKind::ArgumentConflict, msg).with_cmd(&cmd)
     };
 
-    if !matches!(args.update_scheme, VersionUpdateScheme::GitTags)
+    if !matches!(args.update_scheme, UpdateSchemeArg::GitTags)
         && (args.tag_prefix.is_some() || args.git_repo_url.is_some())
     {
         let bad_arg = match args {
@@ -99,15 +119,21 @@ pub fn add(source_file_path: &str, args: AddArgs) -> ExitCode {
         return ExitCode::FAILURE;
     }
 
+    let update_scheme = match args.update_scheme {
+        UpdateSchemeArg::GitTags => VersionUpdateScheme::GitTags {
+            repo_url: args.git_repo_url,
+            tag_prefix: args.tag_prefix,
+        },
+        UpdateSchemeArg::Static => VersionUpdateScheme::Static,
+    };
+
     let mut new_source = Source::new(
         &args.initial_version,
         &args.artifact_url_template,
-        args.update_scheme,
+        update_scheme,
     )
     .with_unpack(args.unpack)
-    .with_pinned(args.pinned)
-    .with_git_url(args.git_repo_url)
-    .with_tag_prefix(args.tag_prefix);
+    .with_pinned(args.pinned);
 
     new_source.pinned = args.pinned;
 
