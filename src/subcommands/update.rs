@@ -62,12 +62,13 @@ pub fn update(source_file_path: &str, args: UpdateArgs) -> ExitCode {
                     errors += 1;
                     continue;
                 }
-                GetLatestVersionError::FetchGitTagsFailed(
-                    FetchLatestGitTagError::NoTagsFitFilter,
-                ) => {
+                GetLatestVersionError::FetchGitTagsFailed {
+                    error: FetchLatestGitTagError::NoTagsFitFilter,
+                    tag_prefix,
+                } => {
                     error!(
                         "no tags found that fit the tag filter `{}`",
-                        source.tag_prefix_filter.as_deref().unwrap_or("")
+                        tag_prefix.as_deref().unwrap_or("")
                     );
                     error!("make sure you've configured tag_prefix correctly");
                     warn!("skipping source {name} with an error");

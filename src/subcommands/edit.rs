@@ -10,8 +10,6 @@ use url::Url;
 pub enum EditableSourceKey {
     Pinned,
     ArtifactUrlTemplate,
-    GitUrl,
-    TagPrefix,
     Unpack,
 }
 
@@ -23,8 +21,6 @@ impl fmt::Display for EditableSourceKey {
             match self {
                 Self::Pinned => "pinned",
                 Self::ArtifactUrlTemplate => "artifact_url_template",
-                Self::GitUrl => "git_url",
-                Self::TagPrefix => "tag_prefix",
                 Self::Unpack => "unpack",
             }
         )
@@ -69,26 +65,6 @@ pub fn edit(
             }
             source.artifact_url_template = value.to_string();
         }
-        EditableSourceKey::GitUrl => {
-            if value.is_empty() {
-                source.set_git_url(None);
-            } else {
-                match Url::parse(value) {
-                    Ok(v) => source.set_git_url(Some(v)),
-                    Err(_) => {
-                        error!("invalid value `{value}` for key {source_key} (must be a valid URL or empty string)");
-                        return ExitCode::FAILURE;
-                    }
-                }
-            }
-        }
-        EditableSourceKey::TagPrefix => {
-            if value.is_empty() {
-                source.tag_prefix_filter = None;
-            } else {
-                source.tag_prefix_filter = Some(value.to_string());
-            }
-        }
         EditableSourceKey::Unpack => match value.parse() {
             Ok(v) => source.unpack = v,
             Err(_) => {
@@ -103,12 +79,7 @@ pub fn edit(
         ExitCode::FAILURE
     } else {
         info!("successfully changed value of `{source_key}` to `{value}` in source {source_name}");
-        if matches!(
-            source_key,
-            EditableSourceKey::ArtifactUrlTemplate
-                | EditableSourceKey::GitUrl
-                | EditableSourceKey::TagPrefix
-        ) {
+        if matches!(source_key, EditableSourceKey::ArtifactUrlTemplate) {
             info!("the changed value could affect the hash; consider running `nix-kunai update --refetch {source_name}`");
         }
         ExitCode::SUCCESS

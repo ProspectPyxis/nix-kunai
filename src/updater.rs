@@ -19,8 +19,11 @@ pub enum VersionUpdateScheme {
 pub enum GetLatestVersionError {
     #[error("error while getting git repository url: {0}")]
     GetGitUrlFailed(#[from] InferGitUrlError),
-    #[error("failed to fetch tags for source: {0}")]
-    FetchGitTagsFailed(#[from] FetchLatestGitTagError),
+    #[error("failed to fetch tags for source: {error}")]
+    FetchGitTagsFailed {
+        error: FetchLatestGitTagError,
+        tag_prefix: Option<String>,
+    },
 }
 
 impl VersionUpdateScheme {
@@ -35,7 +38,12 @@ impl VersionUpdateScheme {
                     |url| Ok(url.clone()),
                 )?;
 
-                Ok(fetch_latest_git_tag(&git_url, tag_prefix.as_deref())?)
+                fetch_latest_git_tag(&git_url, tag_prefix.as_deref()).map_err(|error| {
+                    GetLatestVersionError::FetchGitTagsFailed {
+                        error,
+                        tag_prefix: tag_prefix.clone(),
+                    }
+                })
             }
 
             Self::Static => Ok(source.version.clone()),

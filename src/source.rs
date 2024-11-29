@@ -18,10 +18,6 @@ pub struct Source {
     pub unpack: bool,
     pub pinned: bool,
     pub update_scheme: VersionUpdateScheme,
-    #[serde(rename = "git_url", skip_serializing_if = "Option::is_none")]
-    git_url_inner: Option<Url>,
-    #[serde(rename = "tag_prefix")]
-    pub tag_prefix_filter: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -47,9 +43,7 @@ impl Source {
             version: version.to_string(),
             latest_checked_version: version.to_string(),
             artifact_url_template: artifact_url_template.to_string(),
-            git_url_inner: None,
             hash: String::new(),
-            tag_prefix_filter: None,
             unpack: false,
             pinned: false,
             update_scheme,
@@ -62,10 +56,6 @@ impl Source {
 
     pub fn with_pinned(self, pinned: bool) -> Self {
         Self { pinned, ..self }
-    }
-
-    pub fn set_git_url(&mut self, git_url: Option<Url>) {
-        self.git_url_inner = git_url;
     }
 
     pub fn full_url(&self, version: &str) -> Result<Url, BuildFullUrlError> {
