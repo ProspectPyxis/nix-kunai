@@ -15,7 +15,6 @@ pub struct Source {
     pub hash: String,
     pub latest_checked_version: String,
     pub artifact_url_template: String,
-    pub unpack: bool,
     pub pinned: bool,
     pub update_scheme: VersionUpdateScheme,
 }
@@ -44,14 +43,9 @@ impl Source {
             latest_checked_version: version.to_string(),
             artifact_url_template: artifact_url_template.to_string(),
             hash: String::new(),
-            unpack: false,
             pinned: false,
             update_scheme,
         }
-    }
-
-    pub fn with_unpack(self, unpack: bool) -> Self {
-        Self { unpack, ..self }
     }
 
     pub fn with_pinned(self, pinned: bool) -> Self {

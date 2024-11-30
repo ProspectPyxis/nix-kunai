@@ -169,7 +169,7 @@ pub fn update(source_file_path: &str, args: UpdateArgs) -> ExitCode {
                 ""
             }
         );
-        match get_artifact_hash_from_url(&full_url, source.unpack) {
+        match get_artifact_hash_from_url(&full_url, source.update_scheme.unpack()) {
             Ok(hash) => {
                 if source.version != latest_tag {
                     info!("{name} updated: {} -> {}", source.version, latest_tag);

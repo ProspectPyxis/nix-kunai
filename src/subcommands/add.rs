@@ -12,10 +12,6 @@ use url::Url;
 
 #[derive(Args, Clone)]
 pub struct AddArgs {
-    /// Unpack the artifact,
-    /// use this if the artifact link is an archive (.zip, .tar.gz, etc.)
-    #[arg(short, long)]
-    unpack: bool,
     /// Set the hash to the value provided instead of fetching
     #[arg(long, value_name = "HASH")]
     force_hash: Option<String>,
@@ -47,6 +43,10 @@ pub enum UpdateSchemeArg {
         /// Prefix to filter tags by
         #[arg(long, value_name = "PREFIX")]
         tag_prefix: Option<String>,
+        /// Unpack the artifact,
+        /// use this if the artifact link is an archive (.zip, .tar.gz, etc.)
+        #[arg(short, long)]
+        unpack: bool,
     },
 
     /// Follow a git branch
@@ -81,6 +81,10 @@ pub enum UpdateSchemeArg {
         artifact_url: String,
         /// String to use as a "version"
         version: String,
+        /// Unpack the artifact,
+        /// use this if the artifact link is an archive (.zip, .tar.gz, etc.)
+        #[arg(short, long)]
+        unpack: bool,
     },
 }
 
@@ -158,7 +162,7 @@ pub fn add(source_file_path: &str, args: AddArgs) -> ExitCode {
     };
 
     let mut new_source = match build_source(&args.update_scheme, &initial_version) {
-        Ok(source) => source.with_unpack(args.unpack).with_pinned(args.pinned),
+        Ok(source) => source.with_pinned(args.pinned),
         Err(e) => {
             error!("while building source: {e}");
             return ExitCode::FAILURE;
@@ -176,13 +180,14 @@ pub fn add(source_file_path: &str, args: AddArgs) -> ExitCode {
             }
         };
         info!("fetching hash from {full_url}");
-        new_source.hash = match get_artifact_hash_from_url(&full_url, args.unpack) {
-            Ok(hash) => hash,
-            Err(e) => {
-                error!("{e}");
-                return ExitCode::FAILURE;
-            }
-        };
+        new_source.hash =
+            match get_artifact_hash_from_url(&full_url, new_source.update_scheme.unpack()) {
+                Ok(hash) => hash,
+                Err(e) => {
+                    error!("{e}");
+                    return ExitCode::FAILURE;
+                }
+            };
     }
 
     sources.inner.insert(source_name.clone(), new_source);
@@ -336,11 +341,13 @@ fn build_source(
             artifact_url,
             git_repo,
             tag_prefix,
+            unpack,
             ..
         } => {
             let update_scheme = VersionUpdateScheme::GitTags {
                 repo_url: git_repo.clone(),
                 tag_prefix: tag_prefix.clone(),
+                unpack: *unpack,
             };
 
             Ok(Source::new(version, artifact_url, update_scheme))
@@ -403,10 +410,14 @@ fn build_source(
             Ok(Source::new(version, &artifact_url, update_scheme))
         }
 
-        UpdateSchemeArg::Static { artifact_url, .. } => Ok(Source::new(
+        UpdateSchemeArg::Static {
+            artifact_url,
+            unpack,
+            ..
+        } => Ok(Source::new(
             version,
             artifact_url,
-            VersionUpdateScheme::Static,
+            VersionUpdateScheme::Static { unpack: *unpack },
         )),
     }
 }

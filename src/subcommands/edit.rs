@@ -10,7 +10,6 @@ use url::Url;
 pub enum EditableSourceKey {
     Pinned,
     ArtifactUrlTemplate,
-    Unpack,
 }
 
 impl fmt::Display for EditableSourceKey {
@@ -21,7 +20,6 @@ impl fmt::Display for EditableSourceKey {
             match self {
                 Self::Pinned => "pinned",
                 Self::ArtifactUrlTemplate => "artifact_url_template",
-                Self::Unpack => "unpack",
             }
         )
     }
@@ -65,13 +63,6 @@ pub fn edit(
             }
             source.artifact_url_template = value.to_string();
         }
-        EditableSourceKey::Unpack => match value.parse() {
-            Ok(v) => source.unpack = v,
-            Err(_) => {
-                error!("invalid value `{value}` for key {source_key} (must be `true` or `false`)");
-                return ExitCode::FAILURE;
-            }
-        },
     }
 
     if let Err(e) = sources.write_to_file(source_file_path) {

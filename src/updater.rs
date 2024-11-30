@@ -12,13 +12,16 @@ pub enum VersionUpdateScheme {
     GitTags {
         repo_url: Option<Url>,
         tag_prefix: Option<String>,
+        unpack: bool,
     },
     GitBranch {
         repo_url: Url,
         branch: String,
         short_hash_length: NonZeroUsize,
     },
-    Static,
+    Static {
+        unpack: bool,
+    },
 }
 
 #[derive(Debug, Error)]
@@ -43,6 +46,7 @@ impl VersionUpdateScheme {
             Self::GitTags {
                 repo_url,
                 tag_prefix,
+                ..
             } => {
                 let git_url = repo_url.as_ref().map_or_else(
                     || infer_git_url(&source.artifact_url_template),
@@ -61,6 +65,7 @@ impl VersionUpdateScheme {
                 repo_url,
                 branch,
                 short_hash_length,
+                ..
             } => {
                 let short_hash = fetch_git_branch_commit(repo_url, branch)
                     .map(|hash| hash[0..(short_hash_length.get())].to_string())
@@ -72,13 +77,21 @@ impl VersionUpdateScheme {
                 Ok(format!("{branch}-{short_hash}"))
             }
 
-            Self::Static => Ok(source.version.clone()),
+            Self::Static { .. } => Ok(source.version.clone()),
         }
     }
 
     // Static is generally just a huge edge case, so it should be easy to check
     pub fn is_static(&self) -> bool {
-        matches!(self, Self::Static)
+        matches!(self, Self::Static { .. })
+    }
+
+    pub fn unpack(&self) -> bool {
+        match self {
+            VersionUpdateScheme::GitTags { unpack, .. } => *unpack,
+            VersionUpdateScheme::GitBranch { .. } => true,
+            VersionUpdateScheme::Static { unpack } => *unpack,
+        }
     }
 }
 
