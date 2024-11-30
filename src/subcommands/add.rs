@@ -1,10 +1,11 @@
 use crate::source::{get_artifact_hash_from_url, Source, SourceMap};
 use crate::updater::{
-    fetch_latest_git_tag, infer_git_url, FetchLatestGitTagError, InferGitUrlError,
-    VersionUpdateScheme,
+    fetch_git_branch_commit, fetch_latest_git_tag, infer_git_url, FetchGitBranchCommitError,
+    FetchLatestGitTagError, InferGitUrlError, VersionUpdateScheme,
 };
-use clap::{Args, Subcommand};
+use clap::{Args, Subcommand, ValueEnum};
 use log::{error, info};
+use std::num::{NonZero, NonZeroUsize};
 use std::process::ExitCode;
 use thiserror::Error;
 use url::Url;
@@ -36,7 +37,7 @@ pub enum UpdateSchemeArg {
         /// Initial version of the package to test for
         /// [default: automatically fetch latest]
         version: Option<String>,
-        /// Set source name to this instead of inferring from artifact URL
+        /// Set source name to provided value instead of inferring from artifact URL
         #[arg(short = 'n', long)]
         source_name: Option<String>,
         /// Check latest tags from this repository URL
@@ -47,6 +48,28 @@ pub enum UpdateSchemeArg {
         #[arg(long, value_name = "PREFIX")]
         tag_prefix: Option<String>,
     },
+
+    /// Follow a git branch
+    GitBranch {
+        /// URL to git repository
+        repository: Url,
+        /// Branch to follow
+        branch: String,
+        /// Set source name to provided value instead of inferring
+        #[arg(long)]
+        source_name: Option<String>,
+        /// Length of short hash to use in version number
+        #[arg(long)]
+        short_hash_len: Option<NonZeroUsize>,
+        /// Url to fetch artifacts from instead of inferring,
+        /// where {branch} will be replaced by the branch
+        #[arg(long, conflicts_with = "provider")]
+        artifact_url: Option<String>,
+        /// Provider of the git repository
+        #[arg(long, value_enum, conflicts_with = "artifact_url")]
+        provider: Option<GitBranchProvider>,
+    },
+
     /// Don't change the version, only the hash
     Static {
         /// Name of the source
@@ -59,6 +82,13 @@ pub enum UpdateSchemeArg {
         /// String to use as a "version"
         version: String,
     },
+}
+
+#[derive(Clone, Copy, ValueEnum)]
+pub enum GitBranchProvider {
+    Github,
+    Gitlab,
+    Gitea,
 }
 
 fn validate_artifact_url(s: &str) -> Result<String, String> {
@@ -108,7 +138,7 @@ pub fn add(source_file_path: &str, args: AddArgs) -> ExitCode {
         Ok(v) => v,
         Err(e) => {
             match e {
-                InitialVersionError::GetGitUrlFailed(e) => {
+                InitialVersionError::GetGitUrl(e) => {
                     error!("could not infer git repository URL from artifact URL: {e}");
                     error!("define '--git-repo' manually");
                 }
@@ -127,9 +157,13 @@ pub fn add(source_file_path: &str, args: AddArgs) -> ExitCode {
         }
     };
 
-    let mut new_source = build_source(&args.update_scheme, &initial_version)
-        .with_unpack(args.unpack)
-        .with_pinned(args.pinned);
+    let mut new_source = match build_source(&args.update_scheme, &initial_version) {
+        Ok(source) => source.with_unpack(args.unpack).with_pinned(args.pinned),
+        Err(e) => {
+            error!("while building source: {e}");
+            return ExitCode::FAILURE;
+        }
+    };
 
     if let Some(hash) = args.force_hash {
         new_source.hash = hash;
@@ -164,7 +198,7 @@ pub fn add(source_file_path: &str, args: AddArgs) -> ExitCode {
 
 #[derive(Debug, Error)]
 enum SourceNameError {
-    #[error("could not infer git repository url: {0}")]
+    #[error("could not get git repository url: {0}")]
     GetGitUrlFailed(#[from] InferGitUrlError),
 }
 
@@ -190,6 +224,20 @@ fn build_source_name(update_scheme: &UpdateSchemeArg) -> Result<String, SourceNa
             }))
         }
 
+        UpdateSchemeArg::GitBranch {
+            repository,
+            source_name,
+            ..
+        } => Ok(source_name.clone().unwrap_or_else(|| {
+            repository
+                .path_segments()
+                .expect("git url must be a base")
+                .last()
+                .expect("inferred git url must have a last segment")
+                .trim_end_matches(".git")
+                .to_string()
+        })),
+
         UpdateSchemeArg::Static { source_name, .. } => Ok(source_name.clone()),
     }
 }
@@ -197,13 +245,21 @@ fn build_source_name(update_scheme: &UpdateSchemeArg) -> Result<String, SourceNa
 #[derive(Debug, Error)]
 enum InitialVersionError {
     #[error("could not infer git repository url: {0}")]
-    GetGitUrlFailed(#[from] InferGitUrlError),
+    GetGitUrl(#[from] InferGitUrlError),
     #[error("no tags found that fit the tag prefix")]
     NoTagsFitPrefix(Option<String>),
     #[error("could not fetch latest tag from {git_url}: {error}")]
-    FetchTagsFailed {
+    FetchTags {
         git_url: Url,
         error: Box<FetchLatestGitTagError>,
+    },
+    #[error("branch {0} not found")]
+    BranchNotFound(String),
+    #[error("could not fetch commit of branch {branch} from {git_url}: {error}")]
+    FetchBranchCommit {
+        git_url: Url,
+        branch: String,
+        error: Box<FetchGitBranchCommitError>,
     },
 }
 
@@ -226,7 +282,7 @@ fn build_initial_version(update_scheme: &UpdateSchemeArg) -> Result<String, Init
                         FetchLatestGitTagError::NoTagsFitFilter => {
                             InitialVersionError::NoTagsFitPrefix(tag_prefix.clone())
                         }
-                        _ => InitialVersionError::FetchTagsFailed {
+                        _ => InitialVersionError::FetchTags {
                             git_url,
                             error: Box::new(e),
                         },
@@ -235,11 +291,46 @@ fn build_initial_version(update_scheme: &UpdateSchemeArg) -> Result<String, Init
                 Ok,
             )
         }
+
+        UpdateSchemeArg::GitBranch {
+            repository,
+            branch,
+            short_hash_len,
+            ..
+        } => {
+            let commit_hash = fetch_git_branch_commit(repository, branch).map_err(|e| match e {
+                FetchGitBranchCommitError::BranchNotFound => {
+                    InitialVersionError::BranchNotFound(branch.clone())
+                }
+                _ => InitialVersionError::FetchBranchCommit {
+                    git_url: repository.clone(),
+                    branch: branch.to_string(),
+                    error: Box::new(e),
+                },
+            })?;
+
+            Ok(format!(
+                "{branch}-{}",
+                &commit_hash[0..(short_hash_len.map(NonZero::get).unwrap_or(6))]
+            ))
+        }
+
         UpdateSchemeArg::Static { version, .. } => Ok(version.clone()),
     }
 }
 
-fn build_source(update_scheme: &UpdateSchemeArg, version: &str) -> Source {
+#[derive(Debug, Error)]
+enum BuildSourceError {
+    #[error("git repository URL does not have a base")]
+    GitRepoUrlNoBase,
+    #[error("could not get repository name")]
+    GetRepositoryName,
+}
+
+fn build_source(
+    update_scheme: &UpdateSchemeArg,
+    version: &str,
+) -> Result<Source, BuildSourceError> {
     match update_scheme {
         UpdateSchemeArg::GitTags {
             artifact_url,
@@ -252,11 +343,70 @@ fn build_source(update_scheme: &UpdateSchemeArg, version: &str) -> Source {
                 tag_prefix: tag_prefix.clone(),
             };
 
-            Source::new(version, artifact_url, update_scheme)
+            Ok(Source::new(version, artifact_url, update_scheme))
         }
 
-        UpdateSchemeArg::Static { artifact_url, .. } => {
-            Source::new(version, artifact_url, VersionUpdateScheme::Static)
+        UpdateSchemeArg::GitBranch {
+            repository,
+            branch,
+            artifact_url,
+            provider,
+            short_hash_len,
+            ..
+        } => {
+            let artifact_url = match artifact_url {
+                Some(url) => url.clone(),
+                None => {
+                    let provider = match provider {
+                        Some(p) => p,
+                        None => {
+                            let url_base = repository
+                                .host_str()
+                                .ok_or(BuildSourceError::GitRepoUrlNoBase)?;
+
+                            &match &url_base {
+                                url if url.ends_with("github.com") => GitBranchProvider::Github,
+                                url if url.ends_with("gitlab.com") => GitBranchProvider::Gitlab,
+                                _ => GitBranchProvider::Gitea,
+                            }
+                        }
+                    };
+
+                    let repository_str = repository.as_str().trim_end_matches(".git");
+
+                    match provider {
+                        GitBranchProvider::Github | GitBranchProvider::Gitea => {
+                            format!("{repository_str}/archive/{{branch}}.tar.gz")
+                        }
+
+                        GitBranchProvider::Gitlab => {
+                            let repo_name = repository
+                                .path_segments()
+                                .and_then(|iter| iter.last())
+                                .map(|name| name.trim_end_matches(".git"))
+                                .ok_or(BuildSourceError::GetRepositoryName)?;
+                            format!(
+                                "{repository_str}/-/archive/{{branch}}/{repo_name}-{{branch}}.tar.gz"
+                            )
+                        }
+                    }
+                }
+            };
+
+            let update_scheme = VersionUpdateScheme::GitBranch {
+                repo_url: repository.clone(),
+                branch: branch.to_string(),
+                short_hash_length: short_hash_len
+                    .unwrap_or_else(|| NonZeroUsize::new(6).expect("6 is not 0")),
+            };
+
+            Ok(Source::new(version, &artifact_url, update_scheme))
         }
+
+        UpdateSchemeArg::Static { artifact_url, .. } => Ok(Source::new(
+            version,
+            artifact_url,
+            VersionUpdateScheme::Static,
+        )),
     }
 }

@@ -61,6 +61,12 @@ impl Source {
     pub fn full_url(&self, version: &str) -> Result<Url, BuildFullUrlError> {
         let full_url = self.artifact_url_template.replace("{version}", version);
 
+        let full_url = if let VersionUpdateScheme::GitBranch { branch, .. } = &self.update_scheme {
+            full_url.replace("{branch}", branch)
+        } else {
+            full_url
+        };
+
         Url::parse(&full_url).map_err(|parse_error| BuildFullUrlError {
             full_url,
             parse_error,

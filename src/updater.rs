@@ -14,7 +14,7 @@ pub enum VersionUpdateScheme {
         tag_prefix: Option<String>,
     },
     GitBranch {
-        repo_url: Option<Url>,
+        repo_url: Url,
         branch: String,
         short_hash_length: NonZeroUsize,
     },
@@ -62,12 +62,7 @@ impl VersionUpdateScheme {
                 branch,
                 short_hash_length,
             } => {
-                let git_url = repo_url.as_ref().map_or_else(
-                    || infer_git_url(&source.artifact_url_template),
-                    |url| Ok(url.clone()),
-                )?;
-
-                let short_hash = fetch_git_branch_commit(&git_url, branch)
+                let short_hash = fetch_git_branch_commit(repo_url, branch)
                     .map(|hash| hash[0..(short_hash_length.get())].to_string())
                     .map_err(|error| GetLatestVersionError::FetchBranchCommit {
                         error,
