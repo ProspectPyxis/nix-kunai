@@ -110,7 +110,7 @@ pub fn update(source_file_path: &str, args: UpdateArgs) -> ExitCode {
         let latest_tag = match source.update_scheme.get_new_version_for(source) {
             Ok(tag) => tag,
             Err(e) => match e {
-                GetLatestVersionError::GetGitUrlFailed(e) => {
+                GetLatestVersionError::GetGitUrl(e) => {
                     error!("could not infer git repository url: {e}");
                     error!("git_url may need to be set manually; if so, remove and re-add this source with the correct options");
                     warn!("skipping source {name} with an error");
@@ -118,7 +118,7 @@ pub fn update(source_file_path: &str, args: UpdateArgs) -> ExitCode {
                     errors += 1;
                     continue;
                 }
-                GetLatestVersionError::FetchGitTagsFailed {
+                GetLatestVersionError::FetchGitTags {
                     error: FetchLatestGitTagError::NoTagsFitFilter,
                     tag_prefix,
                 } => {

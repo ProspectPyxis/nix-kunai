@@ -1,6 +1,7 @@
 use crate::source::Source;
 use serde::{Deserialize, Serialize};
 use std::io;
+use std::num::NonZeroUsize;
 use std::process::Command;
 use thiserror::Error;
 use url::Url;
@@ -12,17 +13,27 @@ pub enum VersionUpdateScheme {
         repo_url: Option<Url>,
         tag_prefix: Option<String>,
     },
+    GitBranch {
+        repo_url: Option<Url>,
+        branch: String,
+        short_hash_length: NonZeroUsize,
+    },
     Static,
 }
 
 #[derive(Debug, Error)]
 pub enum GetLatestVersionError {
     #[error("error while getting git repository url: {0}")]
-    GetGitUrlFailed(#[from] InferGitUrlError),
+    GetGitUrl(#[from] InferGitUrlError),
     #[error("failed to fetch tags for source: {error}")]
-    FetchGitTagsFailed {
+    FetchGitTags {
         error: FetchLatestGitTagError,
         tag_prefix: Option<String>,
+    },
+    #[error("failed to get commit for branch {branch}: {error}")]
+    FetchBranchCommit {
+        error: FetchGitBranchCommitError,
+        branch: String,
     },
 }
 
@@ -39,11 +50,31 @@ impl VersionUpdateScheme {
                 )?;
 
                 fetch_latest_git_tag(&git_url, tag_prefix.as_deref()).map_err(|error| {
-                    GetLatestVersionError::FetchGitTagsFailed {
+                    GetLatestVersionError::FetchGitTags {
                         error,
                         tag_prefix: tag_prefix.clone(),
                     }
                 })
+            }
+
+            Self::GitBranch {
+                repo_url,
+                branch,
+                short_hash_length,
+            } => {
+                let git_url = repo_url.as_ref().map_or_else(
+                    || infer_git_url(&source.artifact_url_template),
+                    |url| Ok(url.clone()),
+                )?;
+
+                let short_hash = fetch_git_branch_commit(&git_url, branch)
+                    .map(|hash| hash[0..(short_hash_length.get())].to_string())
+                    .map_err(|error| GetLatestVersionError::FetchBranchCommit {
+                        error,
+                        branch: branch.clone(),
+                    })?;
+
+                Ok(format!("{branch}-{short_hash}"))
             }
 
             Self::Static => Ok(source.version.clone()),
@@ -54,19 +85,6 @@ impl VersionUpdateScheme {
     pub fn is_static(&self) -> bool {
         matches!(self, Self::Static)
     }
-}
-
-#[derive(Debug, Error)]
-pub enum FetchLatestGitTagError {
-    #[error("failed to execute command: {full_command}")]
-    CommandFailed {
-        full_command: String,
-        io_error: io::Error,
-    },
-    #[error("command output is not valid utf8")]
-    CommandOutputInvalidUtf8(#[from] std::string::FromUtf8Error),
-    #[error("no tag fits the provided filter")]
-    NoTagsFitFilter,
 }
 
 #[derive(Debug, Error)]
@@ -95,6 +113,59 @@ pub fn infer_git_url(from: &str) -> Result<Url, InferGitUrlError> {
     url.set_path(&format!("{owner}/{repo}"));
 
     Ok(url)
+}
+
+#[derive(Debug, Error)]
+pub enum FetchGitBranchCommitError {
+    #[error("failed to execute command: {full_command}")]
+    CommandFailed {
+        full_command: String,
+        io_error: io::Error,
+    },
+    #[error("command output is not valid utf8")]
+    CommandOutputInvalidUtf8(#[from] std::string::FromUtf8Error),
+    #[error("could not find the provided branch")]
+    BranchNotFound,
+}
+
+pub fn fetch_git_branch_commit(
+    url: &Url,
+    branch: &str,
+) -> Result<String, FetchGitBranchCommitError> {
+    let args = ["ls-remote", "--branches", url.as_ref()];
+
+    let output = Command::new("git").args(args).output().map_err(|e| {
+        FetchGitBranchCommitError::CommandFailed {
+            full_command: format!("git {}", args.join(" ")),
+            io_error: e,
+        }
+    })?;
+
+    let output_string = String::from_utf8(output.stdout)?;
+
+    let branch_info = output_string
+        .lines()
+        .find(|&line| line.split("/").last().is_some_and(|b| b == branch))
+        .ok_or(FetchGitBranchCommitError::BranchNotFound)?;
+
+    Ok(branch_info
+        .split_whitespace()
+        .next()
+        .expect("line always starts with a hash")
+        .to_string())
+}
+
+#[derive(Debug, Error)]
+pub enum FetchLatestGitTagError {
+    #[error("failed to execute command: {full_command}")]
+    CommandFailed {
+        full_command: String,
+        io_error: io::Error,
+    },
+    #[error("command output is not valid utf8")]
+    CommandOutputInvalidUtf8(#[from] std::string::FromUtf8Error),
+    #[error("no tag fits the provided filter")]
+    NoTagsFitFilter,
 }
 
 pub fn fetch_latest_git_tag(
