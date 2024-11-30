@@ -3,14 +3,13 @@ mod source;
 mod subcommands {
     pub mod add;
     pub mod delete;
-    pub mod edit;
     pub mod init;
     pub mod update;
 }
 mod updater;
 
 use crate::logging::{init_logger, LevelFilterArg};
-use crate::subcommands::{add, delete, edit, init, update};
+use crate::subcommands::{add, delete, init, update};
 use clap::{Parser, Subcommand};
 use std::process::ExitCode;
 
@@ -42,20 +41,6 @@ enum Command {
     Add(Box<add::AddArgs>),
     /// Update sources
     Update(update::UpdateArgs),
-    /// Edit a key for an existing source
-    ///
-    /// Note that the 'update-scheme' key and its members cannot be edited by this command.
-    /// If you wish to change it, it is recommended to copy the hash, delete the existing source,
-    /// and re-add it with the '--force-hash' flag to skip an unnecessary refetch.
-    Edit {
-        /// Name of the source to edit
-        #[arg(value_name = "SOURCE")]
-        source_name: String,
-        /// Key to edit
-        key: edit::EditableSourceKey,
-        /// Value to change the key to, valid values depend on key
-        value: String,
-    },
     /// Delete existing sources
     Delete {
         /// Name of sources to delete
@@ -73,11 +58,6 @@ fn main() -> ExitCode {
         Command::Init => init::init(&cli.source_file),
         Command::Add(args) => add::add(&cli.source_file, *args),
         Command::Update(args) => update::update(&cli.source_file, args),
-        Command::Edit {
-            source_name,
-            key,
-            value,
-        } => edit::edit(&cli.source_file, &source_name, key, &value),
         Command::Delete { source_names } => delete::delete(&cli.source_file, source_names),
     }
 }
