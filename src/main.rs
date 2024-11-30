@@ -32,7 +32,14 @@ enum Command {
     /// Initialize the source file
     Init,
     /// Add a new source
-    Add(add::AddArgs),
+    ///
+    /// Each updater scheme requires different possible arguments;
+    /// see each corresponding help page for details.
+    #[command(
+        subcommand_value_name = "UPDATE_SCHEME",
+        subcommand_help_heading = "Update schemes"
+    )]
+    Add(Box<add::AddArgs>),
     /// Update sources
     Update(update::UpdateArgs),
     /// Edit a key for an existing source
@@ -64,7 +71,7 @@ fn main() -> ExitCode {
 
     match cli.command {
         Command::Init => init::init(&cli.source_file),
-        Command::Add(args) => add::add(&cli.source_file, args),
+        Command::Add(args) => add::add(&cli.source_file, *args),
         Command::Update(args) => update::update(&cli.source_file, args),
         Command::Edit {
             source_name,
