@@ -382,7 +382,7 @@ checksum = "68354c5c6bd36d73ff3feceb05efa59b6acb7626617f4962be322a825e61f79a"
 
 [[package]]
 name = "nix-kunai"
-version = "2024.11.1"
+version = "2024.11.2"
 dependencies = [
  "clap",
  "color-print",
