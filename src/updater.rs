@@ -10,9 +10,9 @@ use url::Url;
 #[serde(rename_all = "kebab-case", tag = "type")]
 pub enum VersionUpdateScheme {
     GitTags {
+        unpack: bool,
         repo_url: Option<Url>,
         tag_prefix: Option<String>,
-        unpack: bool,
     },
     GitBranch {
         repo_url: Url,

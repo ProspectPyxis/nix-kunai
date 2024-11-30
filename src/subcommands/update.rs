@@ -112,7 +112,7 @@ pub fn update(source_file_path: &str, args: UpdateArgs) -> ExitCode {
             Err(e) => match e {
                 GetLatestVersionError::GetGitUrl(e) => {
                     error!("could not infer git repository url: {e}");
-                    error!("git_url may need to be set manually; if so, remove and re-add this source with the correct options");
+                    error!("git_url may need to be set manually; if so, re-add this source with the correct options");
                     warn!("skipping source {name} with an error");
                     skipped += 1;
                     errors += 1;
@@ -123,10 +123,10 @@ pub fn update(source_file_path: &str, args: UpdateArgs) -> ExitCode {
                     tag_prefix,
                 } => {
                     error!(
-                        "no tags found that fit the tag prefix `{}`",
+                        "no tags found fit the tag prefix `{}`",
                         tag_prefix.as_deref().unwrap_or("")
                     );
-                    error!("tag_prefix may be set incorrectly; if so, remove and re-add this source with the correct options");
+                    error!("tag_prefix may be set incorrectly; if so, re-add this source with the correct options");
                     warn!("skipping source {name} with an error");
                     skipped += 1;
                     errors += 1;

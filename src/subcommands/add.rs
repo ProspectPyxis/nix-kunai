@@ -12,12 +12,18 @@ use url::Url;
 
 #[derive(Args, Clone)]
 pub struct AddArgs {
-    /// Set the hash to the value provided instead of fetching
-    #[arg(long, value_name = "HASH")]
-    force_hash: Option<String>,
     /// Mark the source as "pinned", do not update its version
     #[arg(short, long)]
     pinned: bool,
+    /// Override any source with the same name
+    #[arg(short = 'f', long)]
+    force: bool,
+    /// Set the hash to the value provided instead of fetching
+    #[arg(long, value_name = "HASH", conflicts_with = "keep_hash")]
+    force_hash: Option<String>,
+    /// If a source is overridden, keep the previous hash instead of refetching
+    #[arg(long, conflicts_with = "force_hash", requires = "force")]
+    keep_hash: bool,
     #[command(subcommand)]
     update_scheme: UpdateSchemeArg,
 }
@@ -119,7 +125,7 @@ pub fn add(source_file_path: &str, args: AddArgs) -> ExitCode {
         }
     };
 
-    if sources.inner.contains_key(&source_name) {
+    if sources.inner.contains_key(&source_name) && !args.force {
         if matches!(
             args.update_scheme,
             UpdateSchemeArg::GitTags {
@@ -128,11 +134,11 @@ pub fn add(source_file_path: &str, args: AddArgs) -> ExitCode {
             }
         ) {
             error!("source name was inferred as '{source_name}', but said source already exists");
-            error!("define '--name' manually");
+            error!("define '--name' manually, or add '--force' if you wish to override");
         } else {
             error!("a source called {source_name} already exists");
             error!(
-                "you may be trying to update, or if you want to overwrite the source, delete it first"
+                "you may be trying to update, or if you want to overwrite the source, add '--force'"
             );
         }
         return ExitCode::FAILURE;
@@ -154,6 +160,7 @@ pub fn add(source_file_path: &str, args: AddArgs) -> ExitCode {
                             None => "(none)".to_string(),
                         }
                     );
+                    error!("ensure the repository has tags that begin with the correct tag prefix");
                 }
                 _ => error!("{e}"),
             };
@@ -171,6 +178,8 @@ pub fn add(source_file_path: &str, args: AddArgs) -> ExitCode {
 
     if let Some(hash) = args.force_hash {
         new_source.hash = hash;
+    } else if let Some(old_source) = sources.inner.get(&source_name) {
+        new_source.hash = old_source.hash.clone();
     } else {
         let full_url = match new_source.full_url(&initial_version) {
             Ok(url) => url,
@@ -190,13 +199,17 @@ pub fn add(source_file_path: &str, args: AddArgs) -> ExitCode {
             };
     }
 
-    sources.inner.insert(source_name.clone(), new_source);
+    let old_source = sources.inner.insert(source_name.clone(), new_source);
 
     if let Err(e) = sources.write_to_file(source_file_path) {
         error!("{e}");
         ExitCode::FAILURE
     } else {
-        info!("added new source {}", source_name);
+        if old_source.is_some() {
+            info!("overrode source {source_name} (version {initial_version})")
+        } else {
+            info!("added new source {source_name} (version {initial_version})")
+        }
         ExitCode::SUCCESS
     }
 }
