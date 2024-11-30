@@ -119,6 +119,11 @@ nix-kunai add static \
 # Update all sources
 nix-kunai update
 
+# Pin the source sddm-eucalyptus-drop
+# This locks the version in place, making `update` skip the source
+# until the source is unpinned with the `--unpin` flag
+nix-kunai update --pin sddm-eucalyptus-drop
+
 # Delete the nixpkgs source that was added earlier
 nix-kunai delete nixpkgs
 ```
