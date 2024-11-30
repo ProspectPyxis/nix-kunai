@@ -87,19 +87,30 @@ Below is an example on how to set up, add, update, and delete sources:
 # Initialize a kunai.lock file
 nix-kunai init
 
-# Adds a nix-kunai source named `go-grip`, starting at version v0.3.0
+# Adds a nix-kunai source that links to chrisb/go-grip
+# The `git-tags` update scheme will automatically track the latest tag/release available at the repo
+# The source's name will be automatically set to `go-grip` based on the repository name
 # Note the `--tag-prefix v` flag, which will strip the leading "v" from fetched tags
-nix-kunai add \
+nix-kunai add git-tags \
   --tag-prefix v \
-  go-grip
   'https://github.com/chrishrb/go-grip/releases/download/v{version}/go-grip-v{version}-linux-amd64.tar.gz'
-  0.3.0
 
-# Adds a nix-kunai source named `nixpkgs`, tracking the branch nixos-unstable
-# Note the `--update-scheme static` flag - this allows nix-kunai to update the hash without changing the version
+# Adds a nix-kunai source that links to Matt.Jolly/sddm-eucalyptus-drop on GitLab
+# The `git-branch` update scheme will follow the head commit on a particular branch in a repo,
+# which usually means the latest commit
+# The source's name will be automatically set to `sddm-eucalyptus-drop` based on the repository name,
+# and the artifact URL will be constructed from the detected repository provider - in this case, GitLab
+nix-kunai add git-branch \
+  'https://gitlab.com/Matt.Jolly/sddm-eucalyptus-drop.git'
+  master
+
+# Adds a nix-kunai source named `nixpkgs`
+# Using the `static` update scheme, the version will never change,
+# but the hash will be updated every time
+# Note that usually, for this kind of usage, `git-branch` above is preferred,
+# as it appends the commit short hash to the version number to allow differentiation
 # Also note the `--unpack` flag, since we're downloading a tarball
-nix-kunai add \
-  --update-scheme static \
+nix-kunai add static \
   --unpack \
   nixpkgs \
   'https://github.com/NixOS/nixpkgs/archive/{version}.tar.gz' \
