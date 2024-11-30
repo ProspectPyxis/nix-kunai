@@ -1,7 +1,10 @@
 use crate::source::{get_artifact_hash_from_url, GetArtifactHashError, SourceMap};
 use crate::updater::{FetchLatestGitTagError, GetLatestVersionError};
 use clap::Args;
+use indexmap::IndexMap;
 use log::{error, info, warn};
+use serde::Serialize;
+use std::fmt;
 use std::process::ExitCode;
 
 #[derive(Args)]
@@ -15,9 +18,62 @@ pub struct UpdateArgs {
     /// Force update checking even if the source is pinned
     #[arg(short, long)]
     pub force: bool,
+    /// Print updated sources to stdout, regardless of log level
+    #[arg(long)]
+    pub show_updated: bool,
+    /// If any stdout outputs are used, output it as JSON
+    #[arg(short, long)]
+    pub json: bool,
+}
+
+#[derive(Serialize)]
+struct VersionDiff {
+    pub old: String,
+    pub new: String,
+}
+
+impl VersionDiff {
+    pub fn new(old: String, new: String) -> Self {
+        Self { old, new }
+    }
+}
+
+impl fmt::Display for VersionDiff {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        if self.old == self.new {
+            write!(f, "changed hash")
+        } else {
+            write!(f, "{} -> {}", self.old, self.new)
+        }
+    }
+}
+
+#[derive(Serialize)]
+struct UpdatedSources {
+    #[serde(flatten)]
+    pub inner: IndexMap<String, VersionDiff>,
+}
+
+impl UpdatedSources {
+    pub fn new() -> Self {
+        Self {
+            inner: IndexMap::default(),
+        }
+    }
+}
+
+impl Default for UpdatedSources {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 pub fn update(source_file_path: &str, args: UpdateArgs) -> ExitCode {
+    if args.json && !args.show_updated {
+        warn!("'--json' was passed, but '--show-updated' is not set");
+        warn!("the option will do nothing");
+    }
+
     let mut sources = match SourceMap::from_file_json(source_file_path) {
         Ok(s) => s,
         Err(e) => {
@@ -34,7 +90,7 @@ pub fn update(source_file_path: &str, args: UpdateArgs) -> ExitCode {
         }
     }
 
-    let mut updated = 0;
+    let mut updated = UpdatedSources::new();
     let mut up_to_date = 0;
     let mut skipped = 0;
     let mut errors = 0;
@@ -117,9 +173,12 @@ pub fn update(source_file_path: &str, args: UpdateArgs) -> ExitCode {
             Ok(hash) => {
                 if source.version != latest_tag {
                     info!("{name} updated: {} -> {}", source.version, latest_tag);
+                    updated.inner.insert(
+                        name.to_string(),
+                        VersionDiff::new(source.version.clone(), latest_tag.clone()),
+                    );
                     source.hash = hash;
                     source.version = latest_tag.clone();
-                    updated += 1;
                 } else if source.hash != hash {
                     if source.update_scheme.is_static() {
                         info!(
@@ -129,8 +188,11 @@ pub fn update(source_file_path: &str, args: UpdateArgs) -> ExitCode {
                     } else {
                         info!("hash for source {name} changed, but with the same version (version {})", source.version);
                     }
+                    updated.inner.insert(
+                        name.to_string(),
+                        VersionDiff::new(source.version.clone(), latest_tag.clone()),
+                    );
                     source.hash = hash;
-                    updated += 1;
                 } else {
                     info!(
                         "{name} is up to date (same hash) (version {})",
@@ -165,7 +227,35 @@ pub fn update(source_file_path: &str, args: UpdateArgs) -> ExitCode {
         error!("{e}");
         ExitCode::FAILURE
     } else {
-        info!("successfully updated {updated} source(s) ({skipped} skipped ({errors} with errors), {up_to_date} already up to date)");
+        info!(
+            "successfully updated {} source(s) ({skipped} skipped ({errors} with errors), {up_to_date} already up to date)",
+            updated.inner.len()
+        );
+
+        if args.show_updated {
+            if args.json {
+                use std::io::{stdout, Write};
+
+                let mut lock = stdout().lock();
+                serde_json::to_writer_pretty(&mut lock, &updated).unwrap();
+                writeln!(&mut lock).unwrap();
+            } else if !updated.inner.is_empty() {
+                println!(
+                    "Updated packages: {}",
+                    updated
+                        .inner
+                        .iter()
+                        .map(|(name, diff)| format!("{} ({})", name, diff))
+                        .map(std::borrow::Cow::from)
+                        .reduce(|mut acc, s| {
+                            acc.to_mut().push_str(", ");
+                            acc.to_mut().push_str(&s);
+                            acc
+                        })
+                        .unwrap_or_default()
+                )
+            }
+        }
         ExitCode::SUCCESS
     }
 }

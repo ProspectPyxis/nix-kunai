@@ -2,8 +2,8 @@
 name = "nix-kunai"
 # This project is rolling-release.
 # The version is based on [Calendar Versioning](https://calver.org)
-# With a scheme of YYYY.MM.MICRO.
-version = "2024.11.0"
+# With a scheme of YYYY.MM.MINOR.
+version = "2024.11.1"
 description = "Yet another nix dependency manager - simple code, but robust handling."
 edition = "2021"
 license = "GPL-3.0-or-later"
@@ -13,6 +13,7 @@ log = "0.4"
 env_logger = "0.11"
 color-print = "0.3"
 thiserror = "2.0"
+indexmap = { version = "2.6", features = ["serde"] }
 url = { version = "2.5", features = ["serde"] }
 clap = { version = "4.5", features = ["derive"] }
 serde = { version = "1.0", features = ["derive"] }
