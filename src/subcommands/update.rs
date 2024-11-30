@@ -15,7 +15,9 @@ pub struct UpdateArgs {
     /// Fetch a new hash even if the version is already latest
     #[arg(short, long)]
     pub refetch: bool,
-    /// Force update checking even if the source is pinned
+    /// Force update checking even if the source is pinned,
+    /// or if '--pin' or '--unpin' is set,
+    /// ignore warnings
     #[arg(short, long)]
     pub force: bool,
     /// Print updated sources to stdout, regardless of log level
@@ -24,6 +26,19 @@ pub struct UpdateArgs {
     /// If any stdout outputs are used, output it as JSON
     #[arg(short, long)]
     pub json: bool,
+    #[command(flatten)]
+    pin: UpdatePinArgs,
+}
+
+#[derive(Args)]
+#[group(required = false, multiple = false)]
+pub struct UpdatePinArgs {
+    /// Pin the source(s) without updating
+    #[arg(long)]
+    pin: bool,
+    /// Unpin the source(s) without updating
+    #[arg(long)]
+    unpin: bool,
 }
 
 #[derive(Serialize)]
@@ -74,6 +89,14 @@ pub fn update(source_file_path: &str, args: UpdateArgs) -> ExitCode {
         warn!("the option will do nothing");
     }
 
+    let source_filter = args.source_names;
+
+    if (args.pin.pin || args.pin.unpin) && source_filter.is_empty() && !args.force {
+        warn!("one of '--pin', '--pin-after-update', and '--unpin' was passed without source arguments");
+        warn!("this will modify ALL sources in the file; add '--force' if you're certain of this action");
+        return ExitCode::FAILURE;
+    }
+
     let mut sources = match SourceMap::from_file_json(source_file_path) {
         Ok(s) => s,
         Err(e) => {
@@ -81,8 +104,6 @@ pub fn update(source_file_path: &str, args: UpdateArgs) -> ExitCode {
             return ExitCode::FAILURE;
         }
     };
-
-    let source_filter = args.source_names;
 
     for source_name in source_filter.iter() {
         if !sources.inner.contains_key(source_name) {
@@ -100,6 +121,35 @@ pub fn update(source_file_path: &str, args: UpdateArgs) -> ExitCode {
         .iter_mut()
         .filter(|(name, _)| source_filter.is_empty() || source_filter.contains(name))
     {
+        if args.pin.pin {
+            if source.pinned {
+                info!("source {name} is already pinned");
+                up_to_date += 1;
+            } else {
+                source.pinned = true;
+                info!("source {name} has been pinned");
+                updated.inner.insert(
+                    name.to_string(),
+                    VersionDiff::new(source.version.clone(), source.version.clone()),
+                );
+            }
+            continue;
+        }
+        if args.pin.unpin {
+            if !source.pinned {
+                info!("source {name} is already unpinned");
+                up_to_date += 1;
+            } else {
+                source.pinned = false;
+                info!("source {name} has been unpinned");
+                updated.inner.insert(
+                    name.to_string(),
+                    VersionDiff::new(source.version.clone(), source.version.clone()),
+                );
+            }
+            continue;
+        }
+
         if source.pinned && !args.force {
             info!("source {name} is pinned; skipping");
             skipped += 1;
@@ -227,33 +277,72 @@ pub fn update(source_file_path: &str, args: UpdateArgs) -> ExitCode {
         error!("{e}");
         ExitCode::FAILURE
     } else {
-        info!(
+        if !args.pin.pin && !args.pin.unpin {
+            info!(
             "successfully updated {} source(s) ({skipped} skipped ({errors} with errors), {up_to_date} already up to date)",
             updated.inner.len()
         );
 
-        if args.show_updated {
-            if args.json {
-                use std::io::{stdout, Write};
+            if args.show_updated {
+                if args.json {
+                    use std::io::{stdout, Write};
 
-                let mut lock = stdout().lock();
-                serde_json::to_writer_pretty(&mut lock, &updated).unwrap();
-                writeln!(&mut lock).unwrap();
-            } else if !updated.inner.is_empty() {
-                println!(
-                    "Updated packages: {}",
-                    updated
+                    let mut lock = stdout().lock();
+                    serde_json::to_writer_pretty(&mut lock, &updated).unwrap();
+                    writeln!(&mut lock).unwrap();
+                } else if !updated.inner.is_empty() {
+                    println!(
+                        "Updated packages: {}",
+                        updated
+                            .inner
+                            .iter()
+                            .map(|(name, diff)| format!("{} ({})", name, diff))
+                            .map(std::borrow::Cow::from)
+                            .reduce(|mut acc, s| {
+                                acc.to_mut().push_str(", ");
+                                acc.to_mut().push_str(&s);
+                                acc
+                            })
+                            .unwrap_or_default()
+                    )
+                }
+            }
+        } else {
+            let pin = if args.pin.pin { "pin" } else { "unpin" };
+
+            info!(
+                "successfully {pin}ned {} source(s) ({up_to_date} already {pin}ned)",
+                updated.inner.len()
+            );
+
+            if args.show_updated {
+                if args.json {
+                    use std::io::{stdout, Write};
+
+                    let updated = updated
                         .inner
                         .iter()
-                        .map(|(name, diff)| format!("{} ({})", name, diff))
-                        .map(std::borrow::Cow::from)
-                        .reduce(|mut acc, s| {
-                            acc.to_mut().push_str(", ");
-                            acc.to_mut().push_str(&s);
-                            acc
-                        })
-                        .unwrap_or_default()
-                )
+                        .map(|(name, _)| name)
+                        .collect::<Vec<_>>();
+                    let mut lock = stdout().lock();
+                    serde_json::to_writer_pretty(&mut lock, &updated).unwrap();
+                    writeln!(&mut lock).unwrap();
+                } else if !updated.inner.is_empty() {
+                    println!(
+                        "{pin}ned packages: {}",
+                        updated
+                            .inner
+                            .iter()
+                            .map(|(name, _)| name)
+                            .map(std::borrow::Cow::from)
+                            .reduce(|mut acc, s| {
+                                acc.to_mut().push_str(", ");
+                                acc.to_mut().push_str(&s);
+                                acc
+                            })
+                            .unwrap_or_default()
+                    );
+                }
             }
         }
         ExitCode::SUCCESS
