@@ -31,20 +31,7 @@
     });
 
     devShells = forEachSystem (pkgs: {
-      default = pkgs.mkShellNoCC {
-        packages = with pkgs; [
-          git
-          nix
-          (fenix.default.withComponents [
-            "cargo"
-            "clippy"
-            "rust-src"
-            "rust-std"
-            "rustc"
-            "rustfmt"
-          ])
-        ];
-      };
+      default = import ./shell.nix { inherit pkgs; };
     });
   };
 }
