@@ -164,7 +164,7 @@ pub fn update(source_file_path: &str, args: UpdateArgs) -> ExitCode {
             Ok(tag) => tag,
             Err(e) => match e {
                 GetLatestVersionError::GetGitUrl(e) => {
-                    error!("could not infer git repository url: {e}");
+                    error!("{name}: could not infer git repository url: {e}");
                     error!("git_url may need to be set manually; if so, re-add this source with the correct options");
                     warn!("skipping source {name} with an error");
                     skipped += 1;
@@ -176,7 +176,7 @@ pub fn update(source_file_path: &str, args: UpdateArgs) -> ExitCode {
                     tag_prefix,
                 } => {
                     error!(
-                        "no tags found fit the tag prefix `{}`",
+                        "{name}: no tags found fit the tag prefix `{}`",
                         tag_prefix.as_deref().unwrap_or("")
                     );
                     error!("tag_prefix may be set incorrectly; if so, re-add this source with the correct options");
@@ -186,7 +186,7 @@ pub fn update(source_file_path: &str, args: UpdateArgs) -> ExitCode {
                     continue;
                 }
                 _ => {
-                    error!("failed to fetch new version for source {name}: {e}");
+                    error!("{name}: failed to fetch new version for source: {e}");
                     error!("critical error encountered; aborting update");
                     return ExitCode::FAILURE;
                 }
@@ -261,7 +261,7 @@ pub fn update(source_file_path: &str, args: UpdateArgs) -> ExitCode {
                 match e {
                     GetArtifactHashError::PrefetchFailed { .. } => {
                         warn!(
-                            "found newer tag {latest_tag} (> {}), but {e}",
+                            "{name}: found newer tag {latest_tag} (> {}), but {e}",
                             source.version
                         );
                         warn!("either non-release tag or artifact name changed; if the latter, re-add this source with the new artifact URL");
@@ -272,7 +272,7 @@ pub fn update(source_file_path: &str, args: UpdateArgs) -> ExitCode {
                         changed = true;
                     }
                     _ => {
-                        error!("unexpected error: {e}");
+                        error!("{name}: unexpected error: {e}");
                         error!("skipping source; the command may have to be rerun");
                         skipped += 1;
                         errors += 1;
