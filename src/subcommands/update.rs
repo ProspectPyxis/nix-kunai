@@ -92,7 +92,7 @@ pub fn update(source_file_path: &str, args: UpdateArgs) -> ExitCode {
     let source_filter = args.source_names;
 
     if (args.pin.pin || args.pin.unpin) && source_filter.is_empty() && !args.force {
-        warn!("one of '--pin', '--pin-after-update', and '--unpin' was passed without source arguments");
+        warn!("one of '--pin' and '--unpin' was passed without source arguments");
         warn!("this will modify ALL sources in the file; add '--force' if you're certain of this action");
         return ExitCode::FAILURE;
     }
