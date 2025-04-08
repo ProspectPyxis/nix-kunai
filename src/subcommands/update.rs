@@ -257,24 +257,28 @@ pub fn update(source_file_path: &str, args: UpdateArgs) -> ExitCode {
                 changed = true;
             }
 
-            Err(e) => match e {
-                GetArtifactHashError::PrefetchFailed { .. } => {
-                    warn!(
-                        "found newer tag {latest_tag} (> {}), but {e}",
-                        source.version
-                    );
-                    warn!("assuming non-release tag; version will not be updated");
-                    source.latest_checked_version = latest_tag;
-                    up_to_date += 1;
-                    changed = true;
+            Err(e) => {
+                match e {
+                    GetArtifactHashError::PrefetchFailed { .. } => {
+                        warn!(
+                            "found newer tag {latest_tag} (> {}), but {e}",
+                            source.version
+                        );
+                        warn!("either non-release tag or artifact name changed; if the latter, re-add this source with the new artifact URL");
+                        warn!("version will not be updated; source is considered skipped with an error");
+                        source.latest_checked_version = latest_tag;
+                        skipped += 1;
+                        errors += 1;
+                        changed = true;
+                    }
+                    _ => {
+                        error!("unexpected error: {e}");
+                        error!("skipping source; the command may have to be rerun");
+                        skipped += 1;
+                        errors += 1;
+                    }
                 }
-                _ => {
-                    error!("unexpected error: {e}");
-                    error!("skipping source; the command may have to be rerun");
-                    skipped += 1;
-                    errors += 1;
-                }
-            },
+            }
         }
     }
 
