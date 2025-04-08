@@ -21,17 +21,19 @@
     in
       nixpkgs.lib.genAttrs (import systems)
       (system:
-        function (import nixpkgs {
+        function system (import nixpkgs {
           inherit system overlays;
         }));
   in {
-    packages = forEachSystem (pkgs: rec {
-      default = pkgs.callPackage ./package.nix {};
+    packages = forEachSystem (system: pkgs: rec {
+      default = pkgs.callPackage ./package.nix {
+        toolchain = fenix.packages.${system}.minimal.toolchain;
+      };
       nix-kunai = default;
     });
 
-    devShells = forEachSystem (pkgs: {
-      default = import ./shell.nix { inherit pkgs; };
+    devShells = forEachSystem (_system: pkgs: {
+      default = import ./shell.nix {inherit pkgs;};
     });
   };
 }

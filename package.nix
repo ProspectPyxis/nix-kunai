@@ -1,14 +1,18 @@
 {
   pkgs,
   lib,
-  rustPlatform,
   makeWrapper,
+  toolchain,
 }: let
   cargoToml = builtins.fromTOML (builtins.readFile ./Cargo.toml);
 
   pname = cargoToml.package.name;
 in
-  rustPlatform.buildRustPackage {
+  (pkgs.makeRustPlatform {
+    cargo = toolchain;
+    rustc = toolchain;
+  })
+  .buildRustPackage {
     inherit pname;
     inherit (cargoToml.package) version;
 
