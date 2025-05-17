@@ -15,6 +15,9 @@ pub struct AddArgs {
     /// Mark the source as "pinned", do not update its version
     #[arg(short, long)]
     pinned: bool,
+    /// Set source name manually instead of inferring
+    #[arg(long)]
+    source_name: Option<String>,
     /// Override any source with the same name
     #[arg(short = 'f', long)]
     force: bool,
@@ -116,7 +119,10 @@ pub fn add(source_file_path: &str, args: AddArgs) -> ExitCode {
         }
     };
 
-    let source_name = match build_source_name(&args.update_scheme) {
+    let source_name = match args
+        .source_name
+        .map_or_else(|| build_source_name(&args.update_scheme), Ok)
+    {
         Ok(name) => name,
         Err(SourceNameError::GetGitUrlFailed(e)) => {
             error!("could not infer git repository URL from artifact URL: {e}");
