@@ -201,15 +201,14 @@ pub fn fetch_latest_git_tag(
     let filter = filter.unwrap_or("");
     let latest_tag = output_string
         .lines()
-        .map(|line| line.split('/').last().unwrap_or(""))
-        .filter(|line| {
+        .map(|line| line.split('/').next_back().unwrap_or(""))
+        .rfind(|line| {
             line.starts_with(filter)
                 && line
                     .chars()
                     .nth(filter.len())
                     .is_some_and(|c| c.is_ascii_digit())
-        })
-        .last();
+        });
 
     let latest_tag = match latest_tag {
         Some(tag) => tag,

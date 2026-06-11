@@ -242,7 +242,7 @@ fn build_source_name(update_scheme: &UpdateSchemeArg) -> Result<String, SourceNa
                 git_url
                     .path_segments()
                     .expect("git url must be base")
-                    .last()
+                    .next_back()
                     .expect("inferred git url must have at least two path segments")
                     .to_string()
             }))
@@ -256,7 +256,7 @@ fn build_source_name(update_scheme: &UpdateSchemeArg) -> Result<String, SourceNa
             repository
                 .path_segments()
                 .expect("git url must be a base")
-                .last()
+                .next_back()
                 .expect("inferred git url must have a last segment")
                 .trim_end_matches(".git")
                 .to_string()
@@ -408,7 +408,7 @@ fn build_source(
                         GitBranchProvider::Gitlab => {
                             let repo_name = repository
                                 .path_segments()
-                                .and_then(|iter| iter.last())
+                                .and_then(|mut iter| iter.next_back())
                                 .map(|name| name.trim_end_matches(".git"))
                                 .ok_or(BuildSourceError::GetRepositoryName)?;
                             format!(
