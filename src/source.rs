@@ -14,7 +14,7 @@ pub struct Source {
     pub version: String,
     pub hash: String,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub commit_hash: Option<String>,
+    pub rev: Option<String>,
     pub latest_checked_version: String,
     pub artifact_url_template: String,
     pub pinned: bool,
@@ -45,7 +45,7 @@ impl Source {
             latest_checked_version: version.to_string(),
             artifact_url_template: artifact_url_template.to_string(),
             hash: String::new(),
-            commit_hash: None,
+            rev: None,
             pinned: false,
             update_scheme,
         }
@@ -55,9 +55,9 @@ impl Source {
         Self { pinned, ..self }
     }
 
-    pub fn with_commit_hash(self, hash: Option<&str>) -> Self {
+    pub fn with_rev(self, rev: Option<&str>) -> Self {
         Self {
-            commit_hash: hash.map(|h| h.to_string()),
+            rev: rev.map(|r| r.to_string()),
             ..self
         }
     }

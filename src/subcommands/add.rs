@@ -150,7 +150,7 @@ pub fn add(source_file_path: &str, args: AddArgs) -> ExitCode {
         return ExitCode::FAILURE;
     }
 
-    let initial_commit_hash = if let UpdateSchemeArg::GitBranch {
+    let initial_rev = if let UpdateSchemeArg::GitBranch {
         ref repository,
         ref branch,
         ..
@@ -169,37 +169,34 @@ pub fn add(source_file_path: &str, args: AddArgs) -> ExitCode {
         None
     };
 
-    let initial_version =
-        match build_initial_version(&args.update_scheme, initial_commit_hash.as_deref()) {
-            Ok(v) => v,
-            Err(e) => {
-                match e {
-                    InitialVersionError::GetGitUrl(e) => {
-                        error!("could not infer git repository URL from artifact URL: {e}");
-                        error!("define '--git-repo' manually");
-                    }
-                    InitialVersionError::NoTagsFitPrefix(prefix) => {
-                        error!(
-                            "no tags fit the tag prefix {}",
-                            match prefix {
-                                Some(prefix) => format!("'{prefix}'"),
-                                None => "(none)".to_string(),
-                            }
-                        );
-                        error!(
-                            "ensure the repository has tags that begin with the correct tag prefix"
-                        );
-                    }
-                    _ => error!("{e}"),
-                };
-                return ExitCode::FAILURE;
-            }
-        };
+    let initial_version = match build_initial_version(&args.update_scheme, initial_rev.as_deref()) {
+        Ok(v) => v,
+        Err(e) => {
+            match e {
+                InitialVersionError::GetGitUrl(e) => {
+                    error!("could not infer git repository URL from artifact URL: {e}");
+                    error!("define '--git-repo' manually");
+                }
+                InitialVersionError::NoTagsFitPrefix(prefix) => {
+                    error!(
+                        "no tags fit the tag prefix {}",
+                        match prefix {
+                            Some(prefix) => format!("'{prefix}'"),
+                            None => "(none)".to_string(),
+                        }
+                    );
+                    error!("ensure the repository has tags that begin with the correct tag prefix");
+                }
+                _ => error!("{e}"),
+            };
+            return ExitCode::FAILURE;
+        }
+    };
 
     let mut new_source = match build_source(
         &args.update_scheme,
         &initial_version,
-        initial_commit_hash.as_deref(),
+        initial_rev.as_deref(),
     ) {
         Ok(source) => source.with_pinned(args.pinned),
         Err(e) => {
@@ -315,7 +312,7 @@ enum InitialVersionError {
 
 fn build_initial_version(
     update_scheme: &UpdateSchemeArg,
-    initial_commit_hash: Option<&str>,
+    initial_rev: Option<&str>,
 ) -> Result<String, InitialVersionError> {
     match update_scheme {
         UpdateSchemeArg::GitTags {
@@ -351,8 +348,8 @@ fn build_initial_version(
             short_hash_len,
             ..
         } => {
-            let commit_hash = initial_commit_hash
-                .map(|hash| Ok(hash.to_string()))
+            let commit_hash = initial_rev
+                .map(|rev| Ok(rev.to_string()))
                 .unwrap_or_else(|| {
                     fetch_git_branch_commit(repository, branch).map_err(|e| match e {
                         FetchGitBranchCommitError::BranchNotFound => {
@@ -460,8 +457,7 @@ fn build_source(
                     .unwrap_or_else(|| NonZeroUsize::new(6).expect("6 is not 0")),
             };
 
-            Ok(Source::new(version, &artifact_url, update_scheme)
-                .with_commit_hash(initial_commit_hash))
+            Ok(Source::new(version, &artifact_url, update_scheme).with_rev(initial_commit_hash))
         }
 
         UpdateSchemeArg::Static {
