@@ -140,7 +140,7 @@ pub fn add(source_file_path: &str, args: AddArgs) -> ExitCode {
             }
         ) {
             error!("source name was inferred as '{source_name}', but said source already exists");
-            error!("define '--name' manually, or add '--force' if you wish to override");
+            error!("define '--source-name' manually, or add '--force' if you wish to override");
         } else {
             error!("a source called {source_name} already exists");
             error!(
@@ -150,31 +150,57 @@ pub fn add(source_file_path: &str, args: AddArgs) -> ExitCode {
         return ExitCode::FAILURE;
     }
 
-    let initial_version = match build_initial_version(&args.update_scheme) {
-        Ok(v) => v,
-        Err(e) => {
-            match e {
-                InitialVersionError::GetGitUrl(e) => {
-                    error!("could not infer git repository URL from artifact URL: {e}");
-                    error!("define '--git-repo' manually");
-                }
-                InitialVersionError::NoTagsFitPrefix(prefix) => {
-                    error!(
-                        "no tags fit the tag prefix {}",
-                        match prefix {
-                            Some(prefix) => format!("'{prefix}'"),
-                            None => "(none)".to_string(),
-                        }
-                    );
-                    error!("ensure the repository has tags that begin with the correct tag prefix");
-                }
-                _ => error!("{e}"),
-            };
-            return ExitCode::FAILURE;
-        }
+    let initial_commit_hash = if let UpdateSchemeArg::GitBranch {
+        ref repository,
+        ref branch,
+        ..
+    } = args.update_scheme
+    {
+        let maybe_hash = match fetch_git_branch_commit(repository, branch) {
+            Ok(h) => h,
+            Err(e) => {
+                error!("{e}");
+                return ExitCode::FAILURE;
+            }
+        };
+
+        Some(maybe_hash)
+    } else {
+        None
     };
 
-    let mut new_source = match build_source(&args.update_scheme, &initial_version) {
+    let initial_version =
+        match build_initial_version(&args.update_scheme, initial_commit_hash.as_deref()) {
+            Ok(v) => v,
+            Err(e) => {
+                match e {
+                    InitialVersionError::GetGitUrl(e) => {
+                        error!("could not infer git repository URL from artifact URL: {e}");
+                        error!("define '--git-repo' manually");
+                    }
+                    InitialVersionError::NoTagsFitPrefix(prefix) => {
+                        error!(
+                            "no tags fit the tag prefix {}",
+                            match prefix {
+                                Some(prefix) => format!("'{prefix}'"),
+                                None => "(none)".to_string(),
+                            }
+                        );
+                        error!(
+                            "ensure the repository has tags that begin with the correct tag prefix"
+                        );
+                    }
+                    _ => error!("{e}"),
+                };
+                return ExitCode::FAILURE;
+            }
+        };
+
+    let mut new_source = match build_source(
+        &args.update_scheme,
+        &initial_version,
+        initial_commit_hash.as_deref(),
+    ) {
         Ok(source) => source.with_pinned(args.pinned),
         Err(e) => {
             error!("while building source: {e}");
@@ -287,7 +313,10 @@ enum InitialVersionError {
     },
 }
 
-fn build_initial_version(update_scheme: &UpdateSchemeArg) -> Result<String, InitialVersionError> {
+fn build_initial_version(
+    update_scheme: &UpdateSchemeArg,
+    initial_commit_hash: Option<&str>,
+) -> Result<String, InitialVersionError> {
     match update_scheme {
         UpdateSchemeArg::GitTags {
             artifact_url,
@@ -322,16 +351,20 @@ fn build_initial_version(update_scheme: &UpdateSchemeArg) -> Result<String, Init
             short_hash_len,
             ..
         } => {
-            let commit_hash = fetch_git_branch_commit(repository, branch).map_err(|e| match e {
-                FetchGitBranchCommitError::BranchNotFound => {
-                    InitialVersionError::BranchNotFound(branch.clone())
-                }
-                _ => InitialVersionError::FetchBranchCommit {
-                    git_url: repository.clone(),
-                    branch: branch.to_string(),
-                    error: Box::new(e),
-                },
-            })?;
+            let commit_hash = initial_commit_hash
+                .map(|hash| Ok(hash.to_string()))
+                .unwrap_or_else(|| {
+                    fetch_git_branch_commit(repository, branch).map_err(|e| match e {
+                        FetchGitBranchCommitError::BranchNotFound => {
+                            InitialVersionError::BranchNotFound(branch.clone())
+                        }
+                        _ => InitialVersionError::FetchBranchCommit {
+                            git_url: repository.clone(),
+                            branch: branch.to_string(),
+                            error: Box::new(e),
+                        },
+                    })
+                })?;
 
             Ok(format!(
                 "{branch}-{}",
@@ -354,6 +387,7 @@ enum BuildSourceError {
 fn build_source(
     update_scheme: &UpdateSchemeArg,
     version: &str,
+    initial_commit_hash: Option<&str>,
 ) -> Result<Source, BuildSourceError> {
     match update_scheme {
         UpdateSchemeArg::GitTags {
@@ -426,7 +460,8 @@ fn build_source(
                     .unwrap_or_else(|| NonZeroUsize::new(6).expect("6 is not 0")),
             };
 
-            Ok(Source::new(version, &artifact_url, update_scheme))
+            Ok(Source::new(version, &artifact_url, update_scheme)
+                .with_commit_hash(initial_commit_hash))
         }
 
         UpdateSchemeArg::Static {
