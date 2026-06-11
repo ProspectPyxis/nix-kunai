@@ -13,6 +13,7 @@ use url::Url;
 pub struct Source {
     pub version: String,
     pub hash: String,
+    pub commit_hash: Option<String>,
     pub latest_checked_version: String,
     pub artifact_url_template: String,
     pub pinned: bool,
@@ -43,6 +44,7 @@ impl Source {
             latest_checked_version: version.to_string(),
             artifact_url_template: artifact_url_template.to_string(),
             hash: String::new(),
+            commit_hash: None,
             pinned: false,
             update_scheme,
         }
@@ -50,6 +52,20 @@ impl Source {
 
     pub fn with_pinned(self, pinned: bool) -> Self {
         Self { pinned, ..self }
+    }
+
+    pub fn with_commit_hash(self, hash: &str) -> Self {
+        Self {
+            commit_hash: Some(hash.to_string()),
+            ..self
+        }
+    }
+
+    pub fn without_commit_hash(self) -> Self {
+        Self {
+            commit_hash: None,
+            ..self
+        }
     }
 
     pub fn full_url(&self, version: &str) -> Result<Url, BuildFullUrlError> {
