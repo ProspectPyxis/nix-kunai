@@ -13,6 +13,7 @@ use url::Url;
 pub struct Source {
     pub version: String,
     pub hash: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub commit_hash: Option<String>,
     pub latest_checked_version: String,
     pub artifact_url_template: String,
@@ -54,16 +55,9 @@ impl Source {
         Self { pinned, ..self }
     }
 
-    pub fn with_commit_hash(self, hash: &str) -> Self {
+    pub fn with_commit_hash(self, hash: Option<&str>) -> Self {
         Self {
-            commit_hash: Some(hash.to_string()),
-            ..self
-        }
-    }
-
-    pub fn without_commit_hash(self) -> Self {
-        Self {
-            commit_hash: None,
+            commit_hash: hash.map(|h| h.to_string()),
             ..self
         }
     }
