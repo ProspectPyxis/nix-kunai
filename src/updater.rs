@@ -204,6 +204,7 @@ pub fn fetch_latest_git_tag(
         .map(|line| line.split('/').next_back().unwrap_or(""))
         .rfind(|line| {
             line.starts_with(filter)
+                && !line.ends_with("^{}")
                 && line
                     .chars()
                     .nth(filter.len())
